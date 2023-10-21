@@ -1,0 +1,153 @@
+body {
+    background-color: #0D1321; /* dark blue */
+    color: #EEE; /* light gray text for contrast against dark background */
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background-color: #6C63FF; /* purple */
+    flex-direction: column;
+}
+
+.logo-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%; /* Control the width of the container */
+    margin: 0 auto; /* Center the container */
+}
+
+.logo {
+    width: 40px; /* Adjust logo size */
+    height: 40px;
+}
+
+nav {
+    margin: 20px 0;
+}
+
+.navbar {
+    list-style: none;
+    display: flex;
+    justify-content: space-around;
+    padding: 0;
+}
+
+.navbar li {
+    position: relative; /* Added this line */
+}
+
+.navbar li a {
+    color: #EEE; /* light gray to contrast against dark background */
+    text-decoration: none;
+    transition: color 0.5s ease;
+}
+
+.navbar li a:hover {
+    color: #6C63FF; /* purple to match header color */
+}
+
+.submenu {
+    display: none; /* Hide the submenu */
+    position: absolute;
+    background-color: #6C63FF;
+    padding: 10px;
+    border-radius: 5px;
+    list-style: none;
+    z-index: 100; /* Ensure submenu appears above other elements */
+}
+
+.submenu li {
+    margin: 10px 0;
+}
+
+.navbar li:hover .submenu {
+    display: block; /* Show submenu on hover */
+}
+
+.logo-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 70%; /* Control the width of the container */
+    margin: 0 auto; /* Center the container */
+}
+
+.logo, .banner {
+    max-width: 100%; /* Ensures image isn't bigger than its container */
+    height: auto; /* Keeps image proportions */
+}
+
+.logo {
+    width: 40%; /* Images take up 40% of the container's width */
+    max-width: 60px; /* Images won't be larger than 100px */
+    height: auto;
+}
+.banner {
+    width: 70vw; /* Responsive width based on viewport size */
+}
+
+@font-face {
+    font-family: 'Obelix Pro';
+    src: url('fonts/ObelixProBIt-cyr.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+h1 {
+    font-family: 'Obelix Pro', sans-serif;
+    font-size: 3em; /* adjust this value to make the font larger or smaller */
+    white-space: nowrap; /* prevents the text from wrapping */
+}
+
+h3 {
+    font-family: 'Obelix Pro', sans-serif;
+    font-size: 2em; /* adjust this value to make the font larger or smaller */
+}
+
+h5 {
+    font-family: 'Obelix Pro', sans-serif;
+    font-size: 1em; /* adjust this value to make the font larger or smaller */
+}
+
+.logo, .banner {
+    width: 100%;
+    height: auto;
+}
+
+@media screen and (min-width: 600px) {
+    .logo-container {
+        width: 50%; /* Increase the container's width on larger screens */
+    }
+
+    .logo {
+        max-width: 150px; /* Increase the images' max-width on larger screens */
+    }
+}
+
+main {
+    padding: 20px;
+}
+
+footer {
+    background-color: #6C63FF; /* purple */
+    color: white;
+    text-align: center;
+    padding: 10px;
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+}
+#canvas {
+    height: 300px;
+    width: 300px;
+    border-radius: 50%;
+    border: 1px solid black;
+}
