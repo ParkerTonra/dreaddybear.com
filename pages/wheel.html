@@ -1,8 +1,8 @@
 <html>
     <head>
         <title>Fate Decider</title>
-        <link rel="stylesheet" href="main.css" type="text/css" />
-        <script type="text/javascript" src="Winwheel.js"></script>
+        <link rel="stylesheet" href="../css/styles.css" type="text/css" />
+        <script type="text/javascript" src="../js/Winwheel.js"></script>
         <script src="http://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
     </head>
     <body>
@@ -27,7 +27,7 @@
                                     <td align="center" id="pw1" onClick="powerSelected(1);">weak</td>
                                 </tr>
                             </table>
-                            <img id="spin_button" src="spin_on.png" alt="Spin" onClick="startSpin();" />
+                            <img id="spin_button" src="../assets/pictures/spin_on.png" alt="Spin" onClick="startSpin();" />
                             <br /><br />
                             &nbsp;&nbsp;<a href="#" onClick="resetWheel(); return false;">Play Again</a><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(reset)
                         </div>
@@ -76,7 +76,7 @@
             // This function is called when the segment under the prize pointer changes
             // we can play a small tick sound here like you would expect on real prizewheels.
             // -----------------------------------------------------------------
-            let audio = new Audio('tick.mp3');  // Create audio object and load tick.mp3 file.
+            let audio = new Audio('../assets/audio/tick.mp3');  // Create audio object and load tick.mp3 file.
 
             function playSound()
             {
@@ -126,7 +126,7 @@
                     wheelPower = powerLevel;
 
                     // Light up the spin button by changing it's source image and adding a clickable class to it.
-                    document.getElementById('spin_button').src = "spin_on.png";
+                    document.getElementById('spin_button').src = "../assets/pictures/spin_on.png";
                     document.getElementById('spin_button').className = "clickable";
                 }
             }
@@ -145,7 +145,7 @@
                     }
 
                     // Disable the spin button so can't click again while wheel is spinning.
-                    document.getElementById('spin_button').src       = "spin_off.png";
+                    document.getElementById('spin_button').src       = "../assets/pictures/spin_off.png";
                     document.getElementById('spin_button').className = "";
 
                     // Begin the spin animation by calling startAnimation on the wheel object.

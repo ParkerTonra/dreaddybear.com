@@ -11,7 +11,7 @@ Verison History:
 */
 @font-face {
     font-family: 'Obelix Pro';
-    src: url('fonts/ObelixProBIt-cyr.ttf') format('truetype');
+    src: url('../assets/fonts/ObelixProBIt-cyr.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
 }
