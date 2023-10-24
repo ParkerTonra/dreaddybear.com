@@ -14,27 +14,8 @@
             <img class="logo" src="../assets/pictures/logo.png" alt="Dreaddy Bear's logo">
         </div>
     </header>
-    <nav>
-        <ul class="navbar">
-            <li><a href="#">Contact</a></li>
-            <li>
-                <a href="#">Music</a>
-                <ul class="submenu">
-                    <li><a href="https://dreaddybear.bandcamp.com/">Bandcamp</a></li>
-                    <li><a href="https://open.spotify.com/artist/2Y5cVABDv3tlprqWSHx2Op">Spotify</a></li>
-                    <li><a href="https://soundcloud.com/dreaddybear">SoundCloud</a></li>
-                    <li><a href="https://music.apple.com/us/artist/dreaddy-bear/1384832055">Apple Music</a></li>
-                    <li><a href="https://soundcloud.com/dreaddybear/444-twenty">Latest Mix</a></li>
-                </ul>
-            </li>
-            <li><a href="#">Shows</a></li>
-            <li><a href="../pages/playlist.html">Spotify Playlist</a></li>
-            <li><a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ">Free stuff</a></li>
-            <li><a href="https://github.com/ParkerTonra">Github</a></li>
-            <li><a href="https://github.com/ParkerTonra/SoundBored4">Soundbored</a></li>
-            <li><a href="../#index.html">Home</a></li>
-        </ul>
-    </nav>
+
+    <div id="navbar-placeholder"></div>
 
     <main>
         <section id="spotify-playlist">
@@ -48,4 +29,15 @@
         <p>© 2023 Dreaddy Bear</p>
     </footer>
 </body>
+
+<!-- jquery library -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> 
+
+<!-- script to load navbar -->
+<script> 
+    $(function() {
+        $("#navbar-placeholder").load("navbar.html");
+    });
+ </script> 
+ 
 </html>
