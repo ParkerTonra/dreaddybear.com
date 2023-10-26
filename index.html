@@ -1,21 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- Character set -->
     <meta charset="UTF-8">
+
+    <!-- Metadata -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Name of website-->
     <title>Dreaddy Bear</title>
+
+    <!--Stylesheet-->
     <link rel="stylesheet" href="css/styles.css">
+
+    <!-- Load favicon-->
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon_io/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon_io/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon_io/favicon-16x16.png">
+    <link rel="manifest" href="/assets/favicon_io/site.webmanifest">
+
 </head>
 
 <body>
-    <header>
-        <div class="logo-container">
-            <img class="logo" src="assets/pictures/logo.png" alt="Dreaddy Bear's logo">
-            <h1>Dreaddy Bear</h1>
-            <img class="logo" src="assets/pictures/logo.png" alt="Dreaddy Bear's logo">
-        </div>
-        <!-- <img class="banner" src="banner.png" alt="Dreaddy Bear's banner"> -->
-    </header>
+    <!-- Header placeholder-->
+    <div id="header-placeholder"></div>
 
     <!--navbar placeholder ... load navbar-->
     <div id="navbar-placeholder"></div>
@@ -44,6 +52,11 @@
     });
  </script> 
  <!-- script to load header (todo) -->
+ <script> 
+    $(function() {
+        $("#header-placeholder").load("components/header.html");
+    });
+ </script>
 
  <!-- script to load footer (todo) -->
 <script> 

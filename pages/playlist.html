@@ -5,16 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🍝Dreaddy Spaghetti🍝</title>
     <link rel="stylesheet" href="../css/styles.css">
+
+    <!-- Load favicon-->
+    <link rel="apple-touch-icon" sizes="180x180" href="../assets/favicon_io/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon_io/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicon_io/favicon-16x16.png">
+    <link rel="manifest" href="../assets/favicon_io/site.webmanifest">
 </head>
 <body>
-    <header>
-        <div class="logo-container">
-            <img class="logo" src="../assets/pictures/logo.png" alt="Dreaddy Bear's logo">
-            <h1>Dreaddy Bear</h1>
-            <img class="logo" src="../assets/pictures/logo.png" alt="Dreaddy Bear's logo">
-        </div>
-    </header>
+    <!-- Header placeholder-->
+    <div id="header-placeholder"></div>
 
+    <!-- navbar placeholder -->
     <div id="navbar-placeholder"></div>
 
     <main>
@@ -36,8 +38,21 @@
 <!-- script to load navbar -->
 <script> 
     $(function() {
-        $("#navbar-placeholder").load("navbar.html");
+        $("#navbar-placeholder").load("../components/navbar.html");
     });
  </script> 
+ <!-- script to load header (todo) -->
+ <script> 
+    $(function() {
+        $("#header-placeholder").load("../components/header.html");
+    });
+ </script>
+
+ <!-- script to load footer (todo) -->
+<script> 
+    $(function() {
+        $("#footer-placeholder").load("../components/footer.html");
+    });
+</script>
  
 </html>

@@ -5,44 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🍝Dreaddy Bear's Soundbored🍝</title>
     <link rel="stylesheet" href="../css/styles.css">
+
+    <!-- Load favicon-->
+    <link rel="apple-touch-icon" sizes="180x180" href="../assets/favicon_io/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon_io/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicon_io/favicon-16x16.png">
+    <link rel="manifest" href="../assets/favicon_io/site.webmanifest">
 </head>
 <body>
-    <header>
-        <div class="logo-container">
-            <img class="logo" src="../assets/pictures/logo.png" alt="Dreaddy Bear's logo">
-            <h1>Dreaddy Bear</h1>
-            <img class="logo" src="../assets/pictures/logo.png" alt="Dreaddy Bear's logo">
-        </div>
-    </header>
-    <nav>
-        <ul class="navbar">
-            <li><a href="#">Contact</a></li>
-            <li>
-                <a href="#">Music</a>
-                <ul class="submenu">
-                    <li><a href="https://dreaddybear.bandcamp.com/">Bandcamp</a></li>
-                    <li><a href="https://open.spotify.com/artist/2Y5cVABDv3tlprqWSHx2Op">Spotify</a></li>
-                    <li><a href="https://soundcloud.com/dreaddybear">SoundCloud</a></li>
-                    <li><a href="https://music.apple.com/us/artist/dreaddy-bear/1384832055">Apple Music</a></li>
-                    <li><a href="https://soundcloud.com/dreaddybear/444-twenty">Latest Mix</a></li>
-                </ul>
-            </li>
-            <li><a href="#">Shows</a></li>
-            <li><a href="../pages/playlist.html">Spotify Playlist</a></li>
-            <li><a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ">Free stuff</a></li>
-            <li><a href="https://github.com/ParkerTonra">Github</a></li>
-            <li><a href="https://github.com/ParkerTonra/SoundBored4">Soundbored</a></li>
-            <li><a href="../#index.html">Home</a></li>
-        </ul>
-    </nav>
+    <!-- Header placeholder-->
+    <div id="header-placeholder"></div>
+
+    <!--navbar placeholder ... load navbar-->
+    <div id="navbar-placeholder"></div>
 
     <main>
         <iframe src="https://parkertonra.pythonanywhere.com/" width="100%" height="500" frameborder="0" scrolling="yes"></iframe>
     </main>
-    <footer>
-        <p>© 2023 Dreaddy Bear</p>
-    </footer>
+
+    <!--footer placeholder ... load footer-->
+    <div id="footer-placeholder"></div>
+    
 </body>
+
+<!-- script to load navbar -->
+<script> 
+    $(function() {
+        $("#navbar-placeholder").load("../components/navbar.html");
+    });
+ </script> 
+ <!-- script to load header (todo) -->
+ <script> 
+    $(function() {
+        $("#header-placeholder").load("../components/header.html");
+    });
+ </script>
+
+ <!-- script to load footer (todo) -->
+<script> 
+    $(function() {
+        $("#footer-placeholder").load("../components/footer.html");
+    });
+</script>
+
 </html>
 
 

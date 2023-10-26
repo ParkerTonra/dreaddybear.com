@@ -4,6 +4,12 @@
         <link rel="stylesheet" href="../css/styles.css" type="text/css" />
         <script type="text/javascript" src="../js/Winwheel.js"></script>
         <script src="http://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
+
+        <!-- Load favicon-->
+        <link rel="apple-touch-icon" sizes="180x180" href="../assets/favicon_io/apple-touch-icon.png">
+        <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon_io/favicon-32x32.png">
+        <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicon_io/favicon-16x16.png">
+        <link rel="manifest" href="../assets/favicon_io/site.webmanifest">
     </head>
     <body>
         <div align="center">
@@ -170,4 +176,28 @@
             }
         </script>
     </body>
+
+<!-- jquery library -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> 
+
+<!-- script to load navbar -->
+<script> 
+    $(function() {
+        $("#navbar-placeholder").load("components/navbar.html");
+    });
+ </script> 
+ <!-- script to load header (todo) -->
+ <script> 
+    $(function() {
+        $("#header-placeholder").load("components/header.html");
+    });
+ </script>
+
+ <!-- script to load footer (todo) -->
+<script> 
+    $(function() {
+        $("#footer-placeholder").load("components/footer.html");
+    });
+</script>
+
 </html>
