@@ -104,7 +104,8 @@
             // we can play a small tick sound here like you would expect on real prizewheels.
             // -----------------------------------------------------------------
             let audio = new Audio('../assets/audio/owenWowson.mp3');  // Create audio object and load tick.mp3 file.
-            let prizeSound = new Audio('../assets/audio/dry-fart.wav');  // Create audio object and load tick.mp3 file.
+            let prizeSound = new Audio('../assets/audio/dry-fart.wav');
+            let prizeSound2 = new Audio('../assets/audio/animeWOW.wav');  
             var modal = document.getElementById('prizeModal');
 
             function playSound()
@@ -140,7 +141,6 @@
               
               var span = document.getElementsByClassName("close")[0];
               var okButton = document.getElementById('okButton');
-              var secondAudio = new Audio("../assets/audio/animeWOW.mp3");
               
               // When the user clicks on <span> (x), close the modal
               span.onclick = function() {
@@ -149,7 +149,7 @@
 
               // When the user clicks on OK Button, play the sound
               okButton.onclick = function() {
-                secondAudio.play();
+                prizeSound2.play();
                 modal.style.display = "none";
               }
               
