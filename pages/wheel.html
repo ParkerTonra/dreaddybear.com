@@ -11,6 +11,8 @@
         <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon_io/favicon-16x16.png">
         <link rel="manifest" href="/assets/favicon_io/site.webmanifest">
         <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800&display=swap" rel="stylesheet">
+        <!-- jquery library -->
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> 
 
     </head>
     <body>
@@ -103,29 +105,54 @@
             // This function is called when the segment under the prize pointer changes
             // we can play a small tick sound here like you would expect on real prizewheels.
             // -----------------------------------------------------------------
-            let audio = new Audio('../assets/audio/owenWowson.mp3');  // Create audio object and load tick.mp3 file.
-            let prizeSound = new Audio('../assets/audio/dry-fart.wav');
-            let prizeSound2 = new Audio('../assets/audio/animeWow.wav');  
+            let owenWowSound = new Audio('../assets/audio/owenWowson.mp3');  // Create audio object and load tick.mp3 file.
+            let fartSound = new Audio('/assets/audio/dry-fart.mp3');
+            let animeWowSound = new Audio('../assets/audio/animeWow.mp3');  
+            let yaySound = new Audio('../assets/audio/yay.wav');
+            let airHornSound = new Audio('../assets/audio/AIRHORN.wav');
+            let golfClapSound = new Audio('../assets/audio/golf-clappa.mp3');
             var modal = document.getElementById('prizeModal');
 
             function playSound()
             {
                 // Stop and rewind the sound if it already happens to be playing.
-                audio.pause();
-                audio.currentTime = 0;
-
+                owenWowSound.pause();
+                owenWowSound.currentTime = 0;
+                owenWowSound.volume = 0.6;
                 // Play the sound.
-                audio.play();
+                owenWowSound.play();
             }
-
+            //fart sound
             function playSound_prize()
             {
                 // Stop and rewind the sound if it already happens to be playing.
-                prizeSound.pause();
-                prizeSound.currentTime = 0;
+                fartSound.pause();
+                fartSound.currentTime = 0;
+                fartSound.play();
+            }
+            //yay sound
+            function playSound_prize3()
+            {
+                // Stop and rewind the sound if it already happens to be playing.
+                yaySound.pause();
+                yaySound.currentTime = 0;
+                yaySound.volume = 0.5;
+                yaySound.play();
+            }
 
-                // Play the sound.
-                prizeSound.play();
+            function playGolfClapSound() {
+                golfClapSound.pause();
+                golfClapSound.currentTime = 0;
+                golfClapSound.volume = 0.5;
+                golfClapSound.play();
+
+            }
+
+            function playHorn(){
+                airHornSound.pause();
+                airHornSound.currentTime = 0;
+                airHornSound.volume = 0.2;
+                airHornSound.play();
             }
 
             // -------------------------------------------------------
@@ -134,8 +161,12 @@
             // -------------------------------------------------------
             function alertPrize(indicatedSegment) {
                 var prizeText = document.getElementById('prizeText');
+                if (indicatedSegment.text == "Dreaddy's Choice" || indicatedSegment.text == "!dab and spin again" || indicatedSegment.text == "ARAM") {
+                    playSound_prize();
+                } else {
+                    playSound_prize3();
+                }
                 prizeText.textContent = "Awee shit. It's " + indicatedSegment.text;
-                
                 modal.style.display = "block";
               }
               
@@ -149,7 +180,7 @@
 
               // When the user clicks on OK Button, play the sound
               okButton.onclick = function() {
-                prizeSound2.play();
+                animeWowSound.play();
                 modal.style.display = "none";
               }
               
@@ -194,6 +225,7 @@
             }
             function startSpin()
             {
+                playHorn();
                 // Ensure that spinning can't be clicked again while already running.
                 if (wheelSpinning == false) {
                     // Based on the power level selected adjust the number of spins for the wheel, the more times is has
@@ -220,6 +252,7 @@
             }
             function resetWheel()
             {
+                playGolfClapSound();
                 theWheel.stopAnimation(false);  // Stop the animation, false as param so does not call callback function.
                 theWheel.rotationAngle = 0;     // Re-set the wheel angle to 0 degrees.
                 theWheel.draw();                // Call draw to render changes to the wheel.
@@ -237,8 +270,6 @@
 
     </body>
 
-<!-- jquery library -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> 
 
 <!-- script to load navbar -->
 <script> 
