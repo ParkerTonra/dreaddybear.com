@@ -1,7 +1,7 @@
 <html>
     <head>
         <title>Fate Decider</title>
-        <link rel="stylesheet" href="../css/styles.css" type="text/css" />
+        <link rel="stylesheet" href="../css/main.css" type="text/css" />
         <script type="text/javascript" src="../js/Winwheel.js"></script>
         <script src="http://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
 
@@ -10,10 +10,13 @@
         <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon_io/favicon-32x32.png">
         <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon_io/favicon-16x16.png">
         <link rel="manifest" href="/assets/favicon_io/site.webmanifest">
-
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800&display=swap" rel="stylesheet">
 
     </head>
     <body>
+        <div class="back-button">
+            <a href="/../index.html">Back to Home</a>
+        </div>
         <div align="center">
             <h1>Dreaddy Bear's Fate Decider</h1>
             <h5>get spun, it's good for you :)</h5>
@@ -40,43 +43,59 @@
                             &nbsp;&nbsp;<a href="#" onClick="resetWheel(); return false;">Play Again</a><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(reset)
                         </div>
                     </td>
-                    <td width="800" height="880" class = "the_wheel" align="center" valign="center">
-                        <canvas id="canvas" width="800" height="880">
+                    <td width="1200" height="1310" class = "the_wheel" align="center" valign="center">
+                        <canvas id="canvas" width="1600" height="1400">
                         </canvas>
                     </td>
                 </tr>
             </table>
         </div>
+        <div id="prizeModal" class="modal">
+            <div class="modal-content">
+              <span class="close">&times;</span>
+              <p id="prizeText"></p>
+              <button id="okButton">OK</button>
+            </div>
+          </div>
         <script>
             // Create new wheel object specifying the parameters at creation time.
             let theWheel;
-            document.fonts.load('1em "Obelix Pro"').then(function () {
+            document.fonts.load('1em "Montserrat"').then(function () {
             theWheel = new Winwheel({
-                'numSegments'  : 6,     // Specify number of segments.
-                'outerRadius'  : 390,   // Set outer radius so wheel fits inside the background.
-                'textFontSize' : 28,    // Set font size as desired.
-                'textFontFamily' : 'Obelix Pro', 
+                'numSegments'  : 15,     // Specify number of segments.
+                'outerRadius'  : 420,   // Set outer radius so wheel fits inside the background.
+                'textFontSize' : 32,    // Set font size as desired.
+                'textFontFamily' : 'Montserrat', 
                 'segments'     :        // Define segments including colour and text.
                 [
-                   {'fillStyle' : '#33c033', 'text' : 'Remix Roulette'},
+                   {'fillStyle' : '#33c033', 'text' : 'Funk'},
                    {'fillStyle' : '#f44336', 'text' : '140, shorty'},
+                   {'fillStyle' : '#f5c324', 'text' : 'Something Wubby'},
+                   {'fillStyle' : '#33c033', 'text' : 'Sound Design Sesh'},
+                   {'fillStyle' : '#f44336', 'text' : 'Dreaddy\'s Choice'},
+                   {'fillStyle' : '#f5c324', 'text' : 'DJ set'},
+                   {'fillStyle' : '#33c033', 'text' : 'Under the Covers'},
+                   {'fillStyle' : '#f44336', 'text' : 'Beat'},
                    {'fillStyle' : '#f5c324', 'text' : 'Gunfinger DNB'},
                    {'fillStyle' : '#33c033', 'text' : 'Remix Roulette'},
                    {'fillStyle' : '#f44336', 'text' : 'Dreaddy\'s Choice'},
-                   {'fillStyle' : '#f5c324', 'text' : 'DJ set'},
+                   {'fillStyle' : '#f5c324', 'text' : 'Chat'},
+                   {'fillStyle' : '#33c033', 'text' : 'Revisit an oldie'},
+                   {'fillStyle' : '#f44336', 'text' : 'ARAM'},
+                   {'fillStyle' : '#f5c324', 'text' : '!dab and spin again'},
                 ],
                 'animation' :           // Specify the animation to use.
                 {
                     'type'     : 'spinToStop',
-                    'duration' : 15,
-                    'spins'    : 8,
+                    'duration' : 18,
+                    'spins'    : 4,
                     'callbackFinished' : alertPrize,
                     'callbackSound'    : playSound,   // Function to call when the tick sound is to be triggered.
                     'soundTrigger'     : 'pin'        // Specify pins are to trigger the sound, the other option is 'segment'.
                 },
                 'pins' :
                 {
-                    'number' : 16   // Number of pins. They space evenly around the wheel.
+                    'number' : 6  // Number of pins. They space evenly around the wheel.
                 }
             });
             });
@@ -84,7 +103,9 @@
             // This function is called when the segment under the prize pointer changes
             // we can play a small tick sound here like you would expect on real prizewheels.
             // -----------------------------------------------------------------
-            let audio = new Audio('../assets/audio/tick.mp3');  // Create audio object and load tick.mp3 file.
+            let audio = new Audio('../assets/audio/owenWowson.mp3');  // Create audio object and load tick.mp3 file.
+            let prizeSound = new Audio('../assets/audio/dry-fart.wav');  // Create audio object and load tick.mp3 file.
+            var modal = document.getElementById('prizeModal');
 
             function playSound()
             {
@@ -96,16 +117,49 @@
                 audio.play();
             }
 
+            function playSound_prize()
+            {
+                // Stop and rewind the sound if it already happens to be playing.
+                prizeSound.pause();
+                prizeSound.currentTime = 0;
+
+                // Play the sound.
+                prizeSound.play();
+            }
+
             // -------------------------------------------------------
             // Called when the spin animation has finished by the callback feature of the wheel because I specified callback in the parameters
             // note the indicated segment is passed in as a parmeter as 99% of the time you will want to know this to inform the user of their prize.
             // -------------------------------------------------------
-            function alertPrize(indicatedSegment)
-            {
-                // Do basic alert of the segment text.
-                // You would probably want to do something more interesting with this information.
-                alert("Awee shit. It's " + indicatedSegment.text);
-            }
+            function alertPrize(indicatedSegment) {
+                var prizeText = document.getElementById('prizeText');
+                prizeText.textContent = "Awee shit. It's " + indicatedSegment.text;
+                
+                modal.style.display = "block";
+              }
+              
+              var span = document.getElementsByClassName("close")[0];
+              var okButton = document.getElementById('okButton');
+              var secondAudio = new Audio("../assets/audio/animeWOW.mp3");
+              
+              // When the user clicks on <span> (x), close the modal
+              span.onclick = function() {
+                modal.style.display = "none";
+              }
+
+              // When the user clicks on OK Button, play the sound
+              okButton.onclick = function() {
+                secondAudio.play();
+                modal.style.display = "none";
+              }
+              
+              // When the user clicks anywhere outside of the modal, close it
+              window.onclick = function(event) {
+                if (event.target == modal) {
+                  modal.style.display = "none";
+                }
+              }
+
             let wheelPower    = 0;
             let wheelSpinning = false;
             function powerSelected(powerLevel)

@@ -19,6 +19,67 @@ body {
     font-family: 'Obelix Pro';
     background-color: #282828;  /* dark gray */
     color: #fff;  /* white */
+    width:auto;
+}
+
+/* The Modal (background) */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgb(0,0,0); /* Fallback color */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+  }
+  
+  /* Modal Content */
+  .modal-content {
+    background-color: #fefefe;
+    margin: 15% auto; /* 15% from the top and centered */
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%; /* Could be more or less, depending on screen size */
+  }
+  
+  /* The Close Button */
+  .close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+  }
+  
+  .close:hover,
+  .close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  
+  .back-button {
+    position: absolute; /* or fixed if you want it to stay in place when scrolling */
+    top: 10px; /* adjust as necessary */
+    left: 10px; /* adjust as necessary */
+    z-index: 100; /* to ensure it stays on top of other elements */
+}
+
+.back-button a {
+    text-decoration: none;
+    color: white; /* choose the color that fits your design */
+    background-color: #3498db; /* button color */
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-size: 16px; /* adjust as necessary */
+    font-weight: bold; /* makes the text bold */
+    transition: background-color 0.3s ease; /* optional: adds a transition effect */
+}
+
+.back-button a:hover {
+    background-color: #2980b9; /* darker shade on hover for visual feedback */
 }
 
 /* Sets the background image for the wheel */
@@ -26,6 +87,7 @@ td.the_wheel
 {
     background-position: center;
     background-repeat: none;
+    
 }
 
 /* Do some css reset on selected elements */
@@ -40,7 +102,7 @@ h1, p
 h5
 {
     font-family: 'Obelix Pro', sans-serif;
-    margin-bottom: -70px;
+    margin-bottom: -310px;
     text-align: right;
 }
 
