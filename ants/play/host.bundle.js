@@ -363,6 +363,8 @@ module.exports.SKILL = SKILL;
 const d2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const centroid = ants => ({ x: ants.reduce((s, a) => s + a.x, 0) / ants.length, y: ants.reduce((s, a) => s + a.y, 0) / ants.length });
 
+const HERD_RING = 1.8; // objectives.js FARM.radius
+
 module.exports = function installBotCastes(Bot, { G, unit }) {
   const COST = G.COST, TECH = G.TECH || {};
   const P = Bot.prototype;
@@ -407,9 +409,11 @@ module.exports = function installBotCastes(Bot, { G, unit }) {
       return this.order(raiders, 'move', s.x, s.y);
     }
     let best = null, bs = Infinity;
+    // Hard prefers aphid herders: workers standing in the ring of a farm the enemy holds (hold orders are hidden, the ring is not).
+    const herding = w => hard && (g.farms || []).some(f => f.owner !== null && f.owner !== me.team && d2(w, f) <= HERD_RING);
     for (const w of foes) {
       if (w.type !== 'worker' || nests.some(p => d2(w, p.nest) < 3)) continue;
-      const s = d2(w, c) * (hard ? 0.5 : 1) + danger(w, 2) * (hard ? 4 : 2) - (w.carrying ? 1 : 0);
+      const s = d2(w, c) * (hard ? 0.5 : 1) + danger(w, 2) * (hard ? 4 : 2) - (w.carrying ? 1 : 0) - (herding(w) ? 4 : 0);
       if (s < bs) { bs = s; best = w; }
     }
     if (best) this.order(raiders, 'attack', best.x, best.y);
@@ -597,7 +601,8 @@ module.exports = {
     const majors = mine.filter(a => a.type === 'major' && a.hp > 0 && !this.dodging.has(a.id));
     const digging = majors.filter(a => a.order && a.order.kind === 'dig');
     const stop = () => { if (digging.length) this.cmd({ type: 'order', ids: digging.map(a => a.id).slice(0, 60), kind: 'auto' }); this.digCell = null; };
-    if (this.mode !== 'build' || !majors.length) return stop();
+    // Rush bots spend most of the match in attack mode, so they dig then too (a walled-in rush would otherwise just sit).
+    if ((this.mode !== 'build' && this.style !== 'rush') || !majors.length) return stop();
     const foe = this.enemies.reduce((a, b) => (d2(a.nest, me.nest) <= d2(b.nest, me.nest) ? a : b));
     const straight = d2(foe.nest, me.nest);
     const walk = T.field(T.cellOf(foe.nest.x, foe.nest.y))[T.cellOf(me.nest.x, me.nest.y)];
@@ -783,7 +788,7 @@ const DIFFICULTY = {
   easy: { think: 1.6, workers: 6, attackAt: 10, regroupAt: 3, threatR: 4, defendMates: false, upgrades: true, mix: 'fixed' }, // easy: tier I only, late (bots-research.js)
   normal: { think: 0.6, workers: 18, attackAt: 7, regroupAt: 2, threatR: 6, defendMates: true, upgrades: true, mix: 'counter', scout: true, waves: true, medic: 0.4, toolkit: true },
   hard: {
-    think: 0.33, workers: 30, attackAt: 7, regroupAt: 2, threatR: 6, defendMates: true, upgrades: true, mix: 'counter', scout: true,
+    think: 0.33, workers: 40, attackAt: 7, regroupAt: 2, threatR: 6, defendMates: true, upgrades: true, mix: 'counter', scout: true,
     engage: 1.15, retreat: 0.7, waves: true, medic: 0.4, events: true, race: true, toolkit: true,
   },
 };
@@ -861,8 +866,8 @@ class Bot {
     const g = this.game, frenzy = g.event && g.event.id === 'frenzy' ? 2 : 1;
     let s = 0;
     for (const a of ants) {
-      const mul = isArmy(a) ? (a.type === 'soldier' ? frenzy : 1) * g.upgradeMul(a.colony, 'dmg') : 1;
-      s += a.hp * value(a.type) * mul / REF;
+      const mul = isArmy(a) ? (a.type === 'soldier' ? frenzy : 1) * g.upgradeMul(a.colony, 'dmg') * (g.vetMul ? g.vetMul(a) : 1) : 1; // vetMul: veterans bite harder (their hp already carries the bonus)
+      s +=a.hp * value(a.type) * mul / REF;
     }
     return s;
   }
@@ -898,7 +903,7 @@ class Bot {
     const free = this.castes(g, me, army.filter(a => !this.dodging.has(a.id)), foes); // ant16: minus alate raiders and hunters
     this.toolkit(g, free, threat); // ant31: target priority and hold-position for spitters
     if (cfg.medic) this.medic(g, me, free, foeArmy);
-    const fit = free.filter(a => !(a.order && a.order.kind === 'home'));
+    const fit = free.filter(a => !(a.order && (a.order.kind === 'home' || a.order.kind === 'dig'))); // diggers (bot-terrain.js) stay on their rock
 
     if (cfg.events && this.beetleHunt(g, me, fit)) return;
 
@@ -1078,7 +1083,7 @@ class Bot {
   medic(g, me, army, foeArmy) {
     for (const a of army) {
       const max = a.maxHp || (STATS[a.type] || STATS.soldier).hp; // maxHp: Chitin (research.js)
-      if (a.hp > max * this.cfg.medic || (a.order && a.order.kind === 'home')) continue;
+      if (a.hp > max * (this.cfg.medic + 0.1 * (a.vet || 0)) || (a.order && a.order.kind === 'home')) continue; // veterans are worth saving: they leave a little sooner
       if (d2(a, me.nest) < 3) continue;
       const near = foeArmy.filter(b => d2(a, b) < 2.5);
       if (near.length && near.some(b => b.hp > a.hp)) this.cmd({ type: 'order', ids: [a.id], kind: 'home' });

@@ -81,7 +81,10 @@ function connect(mode) {
   const n = ++dialing;
   import('./net/onelobby.js').then(m => { netMod = m; return m.dial(oneLobby); }).then(
     sock => { if (n === dialing && !netGaveUp) attach(sock, mode); else sock.close(); },
-    e => { if (n === dialing) { console.warn('OneLobby join failed:', e); netUnreachable(e); netRetry(mode); } });
+    err => { if (n === dialing) { console.warn('OneLobby join failed:', err);
+      const stop = netMod && netMod.joinStopNotice(err && err.code); // full room, bad code: retrying cannot help
+      if (stop) { $('waiting').classList.add('hidden'); $('join-form').classList.remove('hidden'); netNotice(stop, 12000); return; }
+      netUnreachable(err); netRetry(mode); } });
 }
 
 function attach(sock, mode) {

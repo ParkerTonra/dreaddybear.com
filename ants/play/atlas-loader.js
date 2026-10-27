@@ -68,9 +68,11 @@
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.AtlasLoader = api;
-  // Opt-in for now (no PNG art ships yet): ?atlas=assets/atlas/manifest.json on the page URL.
+  // ant46 bake-tool: the baked atlases in assets/atlas/ (tools/bake-atlas.js) load by default; a missing manifest or PNG leaves the painter
+  // in charge. ?atlas=<manifest url> loads another manifest instead, ?atlas=none turns baked sheets off (the bake tool itself uses it).
   try {
     const q = root.location && /[?&]atlas=([\w./-]+)/.exec(root.location.search || '');
-    if (q && !q[1].includes('..') && !q[1].startsWith('/')) api.loadManifest(q[1]);
+    const url = q ? q[1] : 'assets/atlas/manifest.json';
+    if (url !== 'none' && !url.includes('..') && !url.startsWith('/') && root.location && root.fetch) api.loadManifest(url);
   } catch (_) { /* no location (tests) */ }
 })(typeof window !== 'undefined' ? window : globalThis);

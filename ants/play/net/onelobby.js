@@ -31,6 +31,17 @@ export async function loadKit() {
 export const codes = {};
 export const is = (code, name) => !!code && codes[name] === code;
 
+// A join that fails for one of these reasons will fail again, so the page shows the line and stops retrying (null = retry).
+const STOP_JOIN = {
+  LobbyFull: 'This room is full. Ask the host to start a new game, or host your own.',
+  BadCode: "That join code doesn't look right. Ask the host for the full link, or host your own game.",
+  VersionMismatch: 'You and the host are running different versions of the game. Reload the page and try again.',
+};
+export function joinStopNotice(code) {
+  for (const name in STOP_JOIN) if (is(code, name)) return STOP_JOIN[name];
+  return null;
+}
+
 // Host side: the line to show when a joiner never connected (lobby 'peerFailed'). reason: ice_failed, closed, timeout.
 export function peerFailedNotice(peer, reason) {
   const name = peer && peer.name ? `"${peer.name}"` : 'A friend';
