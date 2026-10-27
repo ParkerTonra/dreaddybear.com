@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head><script>if(!/[?&]dc=/.test(location.search))location.replace('/ants/');</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- "here" when this page came from the host's OneLobby port (server.js fills it there): the page joins that host. -->
+<meta name="onelobby" content="">
+<meta name="share-base" content="">
+<meta name="onelobby-code" content="">
+<title>Ant Arena</title>
+<!-- Inline icon: without one every page load logs a favicon.ico 404 in the console. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%9C%3C/text%3E%3C/svg%3E">
+<style>
+  /* colours and shapes: theme.css (loaded after this block) */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #1b1610; color: var(--ink); font: 15px/1.4 system-ui, sans-serif; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(15, 11, 7, 0.78); z-index: 10; padding: 16px; }
+  .card { background: var(--panel); border: 1px solid #5a4a36; border-radius: 14px; padding: 24px; max-width: 440px; width: 100%; text-align: center; max-height: calc(100vh - 32px); overflow: auto; }
+  h1 { margin: 0 0 4px; font-size: 32px; letter-spacing: 1px; }
+  .sub { opacity: .75; margin: 0 0 18px; }
+  ol { text-align: left; padding-left: 20px; margin: 0 0 18px; }
+  li { margin: 4px 0; }
+  input { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid #5a4a36; background: #120e0a; color: var(--ink); width: 130px; text-transform: uppercase; text-align: center; letter-spacing: 3px; }
+  button { font: inherit; font-weight: 600; padding: 10px 16px; border-radius: 8px; border: 0; background: #c9a24a; color: #1b1610; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .link { display: flex; gap: 8px; margin-top: 12px; }
+  .link input { flex: 1; text-transform: none; letter-spacing: 0; font-size: 13px; text-align: left; }
+  .hidden { display: none !important; }
+  #hud-top { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 18px; align-items: center; background: var(--panel); padding: 8px 16px; border-radius: 10px; white-space: nowrap; }
+  .chip { font-weight: 700; margin: 0 4px; }
+  .chip .nm { font-weight: 800; font-size: .8em; text-transform: uppercase; letter-spacing: .5px; opacity: .9; }
+  /* ant17 feel: 🔒 on tech-locked spawn buttons, a pulsing frame on the running evolution, a clock that pulses when it matters */
+  button.locked::before { content: '🔒 '; }
+  #hud-upgrades .upg.busy { animation: ant-busy 1.2s ease-in-out infinite; }
+  @keyframes ant-busy { 0%, 100% { outline-color: #a6ff3c; } 50% { outline-color: #4fd8ea; } }
+  #obj-hud.urgent { animation: ant-urgent 1s ease-in-out infinite; }
+  @keyframes ant-urgent { 0%, 100% { color: #ffb81c; } 50% { color: #ff4a3a; } }
+  #ab-bar button.ready { animation: ant-ready .6s ease-out 1; }
+  @keyframes ant-ready { 0% { filter: brightness(1.8) saturate(1.4); } 100% { filter: none; } }
+  .chip.me { text-decoration: underline; text-underline-offset: 4px; }
+  .chip.dead { opacity: .35; text-decoration: line-through; }
+  .modes { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+  #hud-bottom { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; background: var(--panel); padding: 10px; border-radius: 12px; }
+  #spec-bar { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid #c9a24a; padding: 10px 16px; border-radius: 12px; text-align: center; max-width: calc(100vw - 32px); }
+  #spec-bar small { display: block; opacity: .75; margin-top: 2px; }
+  #hud-bottom .hint { font-size: 12px; opacity: .7; max-width: 160px; }
+  #banner { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid #c9a24a; padding: 10px 18px; border-radius: 12px; text-align: center; display: flex; gap: 14px; align-items: center; }
+  #die { width: 44px; height: 44px; border-radius: 9px; background: #f4efe6; color: #1b1610; font-size: 28px; font-weight: 800; display: grid; place-items: center; }
+  #banner .name { font-weight: 800; font-size: 18px; }
+  #banner .desc { font-size: 13px; opacity: .85; }
+  #net-notice { position: fixed; top: 58px; right: 12px; z-index: 20; background: var(--panel); border: 1px solid #c9a24a; padding: 6px 12px; border-radius: 8px; font-size: 13px; }
+  #hud-upgrades { position: fixed; bottom: 74px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; background: var(--panel); padding: 6px 10px; border-radius: 10px; font-size: 13px; white-space: nowrap; }
+  #hud-upgrades .upg { padding: 5px 10px; font-size: 13px; background: #5ab0ff; }
+  #hud-build { position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); transition: none; display: flex; gap: 8px; align-items: center; background: var(--panel); padding: 5px 10px; border-radius: 10px; font-size: 13px; white-space: nowrap; }
+  #hud-build .upg { padding: 4px 9px; font-size: 13px; }
+  /* Phones: spawn labels never wrap, the hint and key hints go (no keyboard / no room), and the top bar
+     wraps inside the screen, clear of the mute button, instead of running off both edges. */
+  #hud-bottom button { white-space: nowrap; }
+  @media (hover: none), (max-width: 1800px) { #hud-bottom .hint { display: none; } } /* room for the pings bar */
+  @media (hover: none) { #hud-bottom small { display: none; } }
+  @media (max-width: 720px) {
+    #hud-top { left: 8px; right: 56px; transform: none; flex-wrap: wrap; justify-content: center; white-space: normal; gap: 2px 10px; font-size: 13px; padding: 6px 8px; }
+    #hud-top > span { white-space: nowrap; }
+    .chip { margin: 0 2px; }
+  }
+  /* Four spawn buttons (units lane) on the narrowest phones */
+  @media (max-width: 520px) { #hud-bottom { gap: 6px; padding: 8px; } #hud-bottom button { padding: 8px 8px; font-size: 13px; } }
+  @media (max-width: 720px) { #hud-bottom { flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 16px); } } /* ant16: six spawn buttons */
+  /* HUD extras (hud.js): army counts, cost bars, lobby slots, end stats */
+  .chip .army { font-weight: 600; font-size: .85em; opacity: .85; margin-left: 2px; }
+  .cost-btn { background: linear-gradient(90deg, #c9a24a var(--fill, 100%), #6b5a3a var(--fill, 100%)); }
+  .cost-btn:disabled { opacity: .7; }
+  .slot-row { display: flex; gap: 10px; align-items: center; justify-content: center; margin: 12px 0 4px; }
+  .team { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .team-name { font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+  .vs { font-weight: 800; opacity: .6; }
+  .slot { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; border: 1px dashed #5a4a36; opacity: .55; text-align: left; }
+  .slot.on { opacity: 1; border: 1px solid var(--c); background: rgba(255,255,255,.04); }
+  .slot.you { box-shadow: 0 0 0 2px var(--c); }
+  .slot .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); flex: none; }
+  .slot em { margin-left: auto; font-style: normal; font-size: 12px; opacity: .8; }
+  .spec { font-size: 12px; opacity: .7; }
+  #end-slots { margin-bottom: 14px; }
+  #end-stats table { width: 100%; border-collapse: collapse; margin: 0 0 8px; font-size: 14px; }
+  #end-stats th { font-size: 11px; text-transform: uppercase; opacity: .7; font-weight: 600; padding: 4px; }
+  #end-stats td { padding: 5px 4px; border-top: 1px solid #3d3226; font-variant-numeric: tabular-nums; }
+  #end-stats td:first-child { text-align: left; font-weight: 700; }
+  #end-stats tr.dead td:first-child { text-decoration: line-through; }
+  .match-time { font-size: 12px; opacity: .65; margin-bottom: 14px; }
+  .end-actions { display: flex; gap: 8px; justify-content: center; }
+  #end #bot-fill { margin: 0 0 14px; }
+  #leave { background: #4a3a28; color: var(--ink); }
+  /* Camera lane: minimap, selection panel, help overlay (camera.js, minimap.js, panel.js) */
+  #minimap { position: fixed; right: 12px; bottom: 12px; background: var(--panel); border: 1px solid #5a4a36; border-radius: 10px; padding: 4px; z-index: 5; line-height: 0; }
+  #minimap canvas { cursor: pointer; touch-action: none; }
+  #sel-panel { position: fixed; right: 12px; bottom: 132px; width: 206px; background: var(--panel); border: 1px solid #5a4a36; border-radius: 10px; padding: 8px; z-index: 5; font-size: 13px; user-select: none; }
+  #sel-panel .sp-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: .7; margin-bottom: 4px; }
+  #sel-panel .sp-sub { margin-bottom: 4px; }
+  #sel-panel .sp-row { display: grid; grid-template-columns: 1fr 52px 32px; gap: 6px; align-items: center; cursor: pointer; padding: 2px 0; }
+  #sel-panel .sp-row:hover { filter: brightness(1.25); }
+  #sel-panel .sp-row small { text-align: right; opacity: .8; font-variant-numeric: tabular-nums; }
+  .sp-hp { height: 6px; background: rgba(0,0,0,.5); border-radius: 3px; overflow: hidden; }
+  .sp-hp i { display: block; height: 100%; }
+  #sp-states { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  #sp-states select { flex: 1 0 100%; padding: 3px 4px; font-size: 11px; background: var(--panel, #1b1f14); color: var(--acid, #a6ff3c); border: 1px solid var(--edge-hi, #4a5a2a); border-radius: 4px; }
+  #sp-states button { flex: 1; padding: 3px 4px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #sp-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  #sp-actions button { padding: 4px 7px; font-size: 12px; }
+  #sp-actions small { opacity: .65; font-size: 10px; }
+  #help-btn { position: fixed; top: 10px; right: 56px; z-index: 20; padding: 6px 11px; font-size: 16px; line-height: 1; background: var(--panel); border: 1px solid #5a4a36; color: var(--ink); border-radius: 8px; }
+  #help { z-index: 15; } /* above the lobby / end overlays (10), which come later in the page */
+  #help .card { max-width: 640px; text-align: left; max-height: 90vh; overflow: auto; }
+  #help h2 { margin: 0 0 10px; font-size: 22px; }
+  #help .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px; }
+  #help h3 { margin: 10px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: .7; }
+  #help dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; }
+  #help dt { white-space: nowrap; }
+  kbd { display: inline-block; min-width: 18px; padding: 1px 5px; border: 1px solid #5a4a36; border-bottom-width: 2px; border-radius: 4px; background: #120e0a; font: 600 12px system-ui, sans-serif; text-align: center; }
+  #help .help-close { margin-top: 14px; }
+  @media (max-width: 900px) {
+    #minimap { top: 54px; bottom: auto; right: 8px; }
+    #sel-panel { top: 136px; bottom: auto; right: 8px; width: 172px; }
+    #help .cols { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) { /* phones: the panel only shows with a selection, and smaller */
+    #sel-panel.sp-empty { display: none; }
+    #sel-panel { width: 150px; padding: 6px; font-size: 12px; }
+    #sp-actions button { padding: 3px 5px; font-size: 11px; }
+  }
+  /* ===== ant18/flow (size slider, seat picking, end summary, tutorial hints). Self-contained: merge-safe. ===== */
+  #learn-btn { margin-top: 10px; background: #4a3a28; color: var(--ink); font-size: 13px; padding: 6px 12px; }
+  #flow-size { margin: 10px 0 4px; font-size: 13px; }
+  #flow-size input[type=range] { width: 70%; vertical-align: middle; }
+  #flow-size .fl-ticks { display: flex; justify-content: space-between; width: 70%; margin: 0 auto; font-size: 11px; opacity: .7; }
+  #size-text { opacity: .8; margin-top: 2px; }
+  .slot.open[data-seat], .slot.bot[data-seat] { cursor: pointer; }
+  .slot.open[data-seat]:hover { opacity: .9; border-style: solid; }
+  #end-summary { margin-bottom: 10px; }
+  .fl-sum-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: .7; margin-bottom: 4px; }
+  .fl-tiles { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .fl-tile { background: rgba(255,255,255,.05); border: 1px solid #3d3226; border-radius: 8px; padding: 5px 9px; min-width: 76px; }
+  .fl-tile b { display: block; font-variant-numeric: tabular-nums; }
+  .fl-tile span { font-size: 11px; opacity: .7; }
+  #flow-hint { position: fixed; left: 12px; top: 72px; max-width: 270px; z-index: 7; background: var(--panel); border: 1px solid #c9a24a; border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+  #flow-hint .fl-step { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: .7; margin-bottom: 3px; }
+  #flow-hint .fl-btns { display: flex; gap: 6px; margin-top: 6px; }
+  #flow-hint button { padding: 3px 8px; font-size: 12px; background: #4a3a28; color: var(--ink); }
+  /* ===== end ant18/flow ===== */
+</style>
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud-top" class="hidden">
+  <span id="team0"></span>
+  <span id="clock" data-tip="Chaos dice: Every so often a random event hits the whole map (rain, anteater, beetle, flood...). Dangerous ones show a 3 second warning first; in an earthquake, ants beside a nest or building are safe.">🎲 in 25s</span>
+  <span id="watchers" class="hidden" data-tip="Watching: People watching this match."></span>
+  <span id="team1"></span>
+</div>
+<div id="net-notice" class="hidden"></div>
+<div id="banner" class="hidden"><div id="die">?</div><div><div class="name" id="ev-name"></div><div class="desc" id="ev-desc"></div></div></div>
+<div id="spec-bar" class="hidden"></div>
+<div id="hud-bottom" class="hidden">
+  <button id="b-worker">Worker · 10 <small data-key-hint="spawn.worker">[Z]</small></button>
+  <button id="b-soldier">Soldier · 25 <small data-key-hint="spawn.soldier">[X]</small></button>
+  <button id="b-spitter">Spitter · 25 <small data-key-hint="spawn.spitter">[C]</small></button>
+  <button id="b-major">Major · 35+🔵 <small data-key-hint="spawn.major">[V]</small></button>
+  <button id="b-nurse">Nurse · 30 <small data-key-hint="spawn.nurse">[N]</small></button>
+  <button id="b-alate">Alate · 25 <small data-key-hint="spawn.alate">[B]</small></button>
+  <span class="hint" data-tip="Rally flag: Click your nest (or an outpost), then right-click the ground to set where its new fighters gather, or right-click food to send its new workers there. The spawn buttons hatch from the selected building.">Click your nest to set its rally flag</span>
+</div>
+
+<div id="hud-upgrades" class="hidden"></div>
+<div id="hud-build" class="hidden"></div>
+
+<div id="minimap" class="hidden" data-tip="Minimap: Click or drag to move the camera. Alt+click on the board pings a spot for your team."><canvas id="mm"></canvas></div>
+<div id="sel-panel" class="hidden"></div>
+<div id="flow-hint" class="hidden"></div>
+<button id="help-btn" data-tip="Controls and hotkeys [?]: Every key, order and mouse trick." aria-label="Controls and hotkeys">?</button>
+<div class="overlay hidden" id="help">
+  <div class="card">
+    <h2>Field Manual <small style="font-size:.55em;opacity:.8;letter-spacing:.06em;text-transform:none">(mostly not stained)</small></h2>
+    <div class="cols">
+      <div>
+        <h3>Camera</h3>
+        <dl>
+          <dt>Wheel · pinch</dt><dd>Zoom at the cursor</dd>
+          <dt data-keys="zoom.in zoom.out"></dt><dd>Zoom in / out</dd>
+          <dt>Middle / right drag</dt><dd>Pan (two fingers on touch)</dd>
+          <dt data-keys="pan.left pan.up pan.right pan.down"></dt><dd>Pan</dd>
+          <dt data-keys="view.nest"></dt><dd>Jump to your nest (again: whole board)</dd>
+          <dt data-keys="view.ping"></dt><dd>Jump to the last team ping or under-attack alert</dd>
+          <dt data-keys="view.all"></dt><dd>Whole board</dd>
+          <dt>Minimap</dt><dd>Click or drag to look there</dd>
+        </dl>
+        <h3>Colony</h3>
+        <dl>
+          <dt data-keys="spawn.worker"></dt><dd>Spawn a worker (10 food)</dd>
+          <dt data-keys="spawn.soldier"></dt><dd>Spawn a soldier (25 food)</dd>
+          <dt data-keys="spawn.spitter"></dt><dd>Spawn a spitter (25): ranged acid, beats soldier blobs; needs a clear line, rocks are cover</dd>
+          <dt data-keys="spawn.major"></dt><dd>Spawn a major (35 + 🔵): nest breaker, beats spitters</dd>
+          <dt data-keys="spawn.nurse"></dt><dd>Spawn a nurse (30): heals nearby fighters</dd>
+          <dt data-keys="spawn.alate"></dt><dd>Spawn an alate (25, after your first finished evolution): flying raider</dd>
+          <dt>Hold a button</dt><dd>Keep spawning</dd>
+          <dt>Click your nest · outpost</dt><dd>Select the building: spawn buttons and keys hatch from it (none selected: from the nest). Depots and mounds show info only</dd>
+          <dt>Right-click (building selected)</dt><dd>Ground: its new fighters gather there (rally flag) · food: its new workers forage there · the building itself: clear the worker flag. Flags show only while it is selected</dd>
+        </dl>
+        <h3>Abilities (bar on the left)</h3>
+        <dl>
+          <dt><span data-keys="ability.trail"></span> then drag</dt><dd>Pheromone trail: your ants on it run 40% faster (20 s)</dd>
+          <dt data-keys="ability.alarm"></dt><dd>Alarm: selected fighters (or all) bite 50% harder for 5 s, then tire for 6 s</dd>
+          <dt><span data-keys="ability.volley"></span> then click</dt><dd>Acid volley: spitters within 4.5 tiles hit the ring 1.6 s later. Step out of enemy rings!</dd>
+          <dt data-keys="ability.call"></dt><dd>Queen's call: every ant runs home fast, fighters guard the nest</dd>
+          <dt>Right-click · <span data-keys="cancel"></span></dt><dd>Cancel a targeting ability</dd>
+        </dl>
+        <h3>Build</h3>
+        <dl>
+          <dt data-keys="build.cycle"></dt><dd>Build mode (press again: next structure)</dd>
+          <dt>Click</dt><dd>Place it; selected workers build it, else the 2 nearest (<kbd>Shift</kbd>: place more)</dd>
+          <dt>🍯 Food cache</dt><dd>50 food. Workers drop food here</dd>
+          <dt>🌋 Acid mound</dt><dd>45 food. Turret, spits acid; majors shrug it off</dd>
+          <dt>⛺ Outpost</dt><dd>90 food. A second hatchery with its own flags: select it to hatch from it. If your nest falls, the colony moves in</dd>
+          <dt>🍄 Fungus garden</dt><dd>60 food, within 5 of home. Pays 0.5 food/s by itself, +0.4 per worker tending it (2 max). Its builders stay; right-click it with workers to tend</dd>
+          <dt>Enemy buildings</dt><dd>Fighters raze them on their way; majors best</dd>
+        </dl>
+        <h3>Map objectives</h3>
+        <dl>
+          <dt>🌿 Aphid farm</dt><dd>Fighters near it with no enemy fighters capture it (ring fills). Your colony gets +1 food/s per farm held; workers on Hold Position in the ring add +0.5 each (2 max), but they are bait</dd>
+          <dt>🕷 Spider lair</dt><dd>Corner spider bites one ant at a time; ants touching it bite back. Drops 45 food + 3 🔵, returns after 2:30</dd>
+          <dt>⏱ Clock</dt><dd>At 12:00 more farms wins. Tied: sudden death, nests crumble, first to lead on farms wins</dd>
+        </dl>
+      </div>
+      <div>
+        <h3>Units</h3>
+        <dl>
+          <dt>Click · drag</dt><dd>Select ant · box select (skips workers unless the box has only workers)</dd>
+          <dt><kbd>Shift</kbd>+click</dt><dd>Add / remove from selection</dd>
+          <dt>Double-click</dt><dd>All visible ants of that type</dd>
+          <dt data-keys="select.fighters select.workers select.all"></dt><dd>Select soldiers / workers / all</dd>
+          <dt data-keys="select.idle"></dt><dd>Next idle fighter: select it and centre on it (also the 💤 chip; Shift+click it: select them all)</dd>
+          <dt data-keys="select.hurt"></dt><dd>Select fighters under 50% health</dd>
+          <dt><kbd>Ctrl</kbd>+click · box</dt><dd>Take ants out of the selection. <kbd>Ctrl</kbd>+double-click: every ant of that type on the map</dd>
+          <dt>Selection panel</dt><dd>Click a type: keep only it · <kbd>Ctrl</kbd>+click: all of it on the map · right-click: drop it · middle-click: centre on it</dd>
+          <dt>Right-click</dt><dd>Smart order: enemy ant → attack it (focus fire) · your ant → follow it · enemy nest → siege it, ignoring its workers · food → forage · ground → move (soldiers bite what is in reach but never chase; Ctrl: soldiers attack-move) · enemy structure → raze it, ignoring workers · rock with majors selected → they dig it out (10 s, up to 3 stack; the enemy sees the ring)</dd>
+          <dt>Right-DRAG</dt><dd>Formation line: the group spreads along it, keeping its order</dd>
+          <dt><kbd>Ctrl</kbd>+right-click</dt><dd>Plain move: walk there, bite only what you pass, never chase (retreats work)</dd>
+          <dt><kbd>Shift</kbd>+order</dt><dd>Queue it after the current orders (waypoint lines)</dd>
+          <dt><span data-keys="order.attack"></span> then click</dt><dd>Attack-move, or attack the clicked ant. <span data-keys="order.attack"></span> then drag: attack everything in the circle</dd>
+          <dt><span data-keys="order.patrol"></span> then click</dt><dd>Patrol between here and there</dd>
+          <dt><span data-keys="order.stop"></span> · <span data-keys="order.hold"></span></dt><dd>Stop · hold position</dd>
+          <dt data-keys="state.fire"></dt><dd>Fire state: hold fire → return fire → fire at will</dd>
+          <dt data-keys="state.move"></dt><dd>Move state: hold position → maneuver (chase 4 tiles, then come back) → roam</dd>
+          <dt>Target priority</dt><dd>The dropdown under the state buttons: selected soldiers and spitters pick the chosen kind of ant first when several are in range (a bias, not a command; their orders stay)</dd>
+          <dt>Mixed armies</dt><dd>Attack-move and formation-line orders make a group of different speeds arrive together (everyone walks at the slowest one's pace). Plain move (<kbd>Ctrl</kbd>+right-click) never does, so retreats stay fast. New spitters and nurses wait a little behind the fighters' flag, toward home</dd>
+          <dt data-keys="order.home"></dt><dd>Go home</dd>
+          <dt data-keys="order.auto"></dt><dd>Back to automatic</dd>
+          <dt>Red lines</dt><dd>Selected ants' current targets (ring on the target)</dd>
+          <dt data-keys="group.save"></dt><dd>Save control group</dd>
+          <dt data-keys="group.recall"></dt><dd>Recall group (twice: centre on it)</dd>
+          <dt data-keys="group.add"></dt><dd>Add selection to a group</dd>
+          <dt data-keys="group.auto"></dt><dd>Autogroup: selected caste goes to group N</dd>
+          <dt data-keys="group.autoclear"></dt><dd>Autogroup: clear selected caste</dd>
+          <dt data-keys="cancel"></dt><dd>Deselect (ants or building)</dd>
+        </dl>
+        <h3>Team</h3>
+        <dl>
+          <dt><span data-keys="ping.arm"></span> · <kbd>Alt</kbd>+click</dt><dd>Ping the map</dd>
+          <dt data-keys="sound.mute"></dt><dd>Mute sound</dd>
+          <dt data-keys="help.toggle"></dt><dd>This help</dd>
+        </dl>
+        <!-- research lane: evolutions -->
+        <h3>Evolutions</h3>
+        <dl>
+          <dt data-keys="evo.dmg"></dt><dd>🦷 Mandibles: army damage</dd>
+          <dt data-keys="evo.chitin"></dt><dd>🛡️ Chitin: army HP, tougher nest</dd>
+          <dt data-keys="evo.acid"></dt><dd>🧪 Acid glands: spitter range, splash</dd>
+          <dt data-keys="evo.legs"></dt><dd>🦵 Long legs: every ant faster</dd>
+          <dt data-keys="evo.forage"></dt><dd>🌾 Big crops: workers carry more</dd>
+          <dt data-keys="evo.jelly"></dt><dd>🍯 Royal jelly: nurses heal faster and tend workers</dd>
+          <dt><kbd>Shift</kbd>+key</dt><dd>Cancel it (or right-click its button); full refund</dd>
+        </dl>
+        <p style="font-size:12px;opacity:.8;margin:4px 0 0">Tier III (your one mastery) also changes a rule: Mandibles cleave a second enemy, Chitin regrows nest and buildings, Acid glands leave slowing puddles, Long legs ignore rain and flood, Big crops carry 2 pellets and pay +10%, Royal jelly heals a second patient. Hover the button for the details. Gold chevrons over an ant mark a veteran (3 kills: +10% damage and HP) or elite (8 kills: +20%).</p>
+        <p style="font-size:12px;opacity:.8;margin:4px 0 0">Research costs food (plus pellets from tier II), runs one at a time and takes seconds. Only one evolution can reach tier III. Icons on the top bar show every colony's evolutions.</p>
+        <h3>Fog of war</h3>
+        <dl>
+          <dt>Sight</dt><dd>You see around your ants, nests and finished buildings (and your teammate's). Nests 5.5 tiles, alates and outposts 5, spitters 4.5, soldiers and mounds 4, majors and nurses 3.5, workers and caches 3</dd>
+          <dt>Dark ground</dt><dd>Never scouted · dimmer: seen before, nothing live shown</dd>
+          <dt>Enemy buildings</dt><dd>Shown while in sight; afterwards a faded ghost of what you last saw</dd>
+          <dt>Enemy nests</dt><dd>Always on the map, with the HP you last saw. Enemy food, flags and research in progress stay hidden; finished evolutions show on their top-bar chip</dd>
+          <dt>Scouting</dt><dd>Send a worker or soldier out (right-click) to see what's coming. Bots scout too</dd>
+          <dt>Chaos dice</dt><dd>Events, the anteater and the beetle are seen by everyone</dd>
+        </dl>
+      </div>
+      <p class="credits"><small>Sound effects: Kenney Impact Sounds and Sci-Fi Sounds (CC0, kenney.nl).</small></p>
+    </div>
+    <button class="help-close">Got it</button>
+  </div>
+</div>
+
+<div class="overlay" id="lobby">
+  <div class="card">
+    <h1>🐜 Ant Arena</h1>
+    <p class="sub">Isometric colony battle · 1v1 or 2v2</p>
+    <span class="tagline">Bug-tech warfare. Please do not feed the queen after midnight.</span>
+    <details id="howto"><summary>How to play</summary>
+    <ol>
+      <li>Pick a room code and choose <b>1v1</b> or <b>2v2</b>; send friends the link (or fill with bots).</li>
+      <li><b>Z</b> workers gather food. <b>X</b> soldiers fight, <b>C</b> spitters beat soldier blobs, <b>V</b> majors (a pellet) beat spitters and smash nests. <b>N</b> nurses heal, <b>B</b> alates fly in to raid workers.</li>
+      <li><b>T Y U I O</b> evolve your colony (only one evolution reaches tier III). <b>G J K L</b> abilities: trail, alarm, acid volley, queen's call. <b>M</b> builds caches, acid mounds, outposts.</li>
+      <li>Fog of war: you see around your ants and buildings. Every 25 s a chaos die rolls: in an earthquake, ants beside a nest or finished building are safe.</li>
+      <li>Hold the 🌿 <b>aphid farms</b> for +1 food/s; kill a corner 🕷 <b>spider</b> for loot.</li>
+      <li>Destroy every enemy nest (a falling nest moves into its outpost). At 12:00 more farms wins; tied: sudden death. <b>?</b> lists every key.</li>
+    </ol>
+    </details>
+    <div id="join-form">
+      <input id="room" maxlength="8" placeholder="CODE">
+      <div class="modes"><button id="join1">Play 1v1</button><button id="join2">Play 2v2</button></div>
+      <button id="learn-btn" data-tip="Learn to play: A short solo match against an easy bot, with hints that advance as you do things. Never starts by itself.">Learn to play</button>
+    </div>
+    <div id="waiting" class="hidden">
+      <p id="wait-msg">Waiting for players in room <b id="room-code"></b>…</p>
+      <div id="slots"></div>
+      <div id="flow-size"><div>Match size</div><input type="range" id="size-range" min="0" max="2" step="1" value="0" aria-label="Match size"><div class="fl-ticks"><span>Quick</span><span>Standard</span><span>Large</span></div><div id="size-text"></div></div>
+      <div class="link"><input id="share" readonly><button id="copy">Copy</button></div>
+      <div id="start-row" class="modes hidden"><button id="start-match">▶ Start match</button></div>
+      <div id="bot-fill" class="modes hidden"><select id="bot-diff" style="font:inherit;border-radius:8px;padding:6px"><option value="easy">Easy bots</option><option value="normal" selected>Normal bots</option><option value="hard">Hard bots</option></select><button id="fill-bots">🤖 Fill empty slots with bots</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="end">
+  <div class="card">
+    <h1 id="end-title"></h1>
+    <p class="sub" id="end-sub"></p>
+    <div id="end-summary" class="hidden"></div>
+    <div id="end-stats" class="hidden"></div>
+    <div id="end-slots" class="hidden"></div>
+    <div class="end-actions"><button id="leave">Back to lobby</button></div>
+  </div>
+</div>
+
+<script src="settings.js"></script><!-- ant18: Reduced motion; first so motionSin exists for every pulse -->
+<script src="tip.js"></script>
+<script src="keys.js"></script><!-- ant18/keymap: the one key table (after tip.js, before every script that binds a key) -->
+<script src="sound.js"></script>
+<script src="fx.js"></script>
+<script src="netbuf.js"></script>
+<script src="camera.js"></script>
+<script src="unit-art.js"></script>
+<script src="atlas-loader.js"></script><!-- ant26: PNG atlas seam for direction B; opt-in with ?atlas=<manifest url>, painter otherwise -->
+<script src="tod.js"></script><!-- ant19/tod: seed-picked time of day, one live wash -->
+<script src="terrain-draw.js"></script>
+<script src="world-art.js"></script><!-- ant18/ground: nest, food, structure art -->
+<script src="creature-art.js"></script><!-- ant19/creatures: beetle, anteater, spider sprites -->
+<script src="decals.js"></script><!-- ant18/decals: wear, marks, dust, spores, critters -->
+<script src="fog.js"></script>
+<script src="client.js"></script>
+<script src="render.js"></script>
+<script src="objectives.js"></script>
+<script src="pings.js"></script>
+<script src="hud.js"></script>
+<script src="economy.js"></script>
+<script src="research.js"></script><!-- research lane: evolution bar, T Y U I O, chip icons -->
+<script src="ui-world.js"></script><!-- ant19/ui-world: rings, bars, pennants, pings, minimap pieces -->
+<script src="input.js"></script>
+<script src="minimap.js"></script>
+<script src="alerts.js"></script><!-- control B5: under-attack alert (after minimap: shares its ping list) -->
+<script src="panel.js"></script>
+<script src="abilities.js"></script><!-- ant16: active abilities -->
+<script src="structures.js"></script><!-- ant16: build bar, M build mode, structure art -->
+<script src="flow.js"></script><!-- ant18: size slider, seats, end summary, tutorial -->
+<script>Flow.wire(send, () => { document.getElementById('room').value = 'L' + Math.random().toString(36).slice(2, 6).toUpperCase(); join('1v1'); });</script>
+<script src="keysettings.js"></script><!-- ant18/keymap: Keys section of Settings (load after settings.js once that merges) -->
+</body>
+</html>

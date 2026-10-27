@@ -1,0 +1,76 @@
+// PNG ant atlases (art direction B, docs/art-overhaul.md section 3): the seam that lets a caste's sprite cells come from a pre-rendered
+// PNG (offline 3D, hand art) instead of the procedural painter in unit-art.js. render.js asks sheet(side, type) when it builds an atlas;
+// a ready sheet makes the atlas copy whole heading pages out of the PNG, anything else (nothing registered, still loading, failed to
+// load, wrong layout) leaves the painter in charge, so a missing or broken PNG can never leave a caste invisible.
+//
+// Sheet layout (same as a painted atlas page, heading pages stacked top to bottom):
+//   page `bin` = rows (y from bin * rows * ch)   cell (col, row) = (col * cw, bin * rows * ch + row * ch), size cw x ch
+//   col = gait (0..gait-1), row = antenna wiggle x pose + corpse row: ANTENNA * 2 + 1 rows (see render.js antAtlas)
+//   Image size = (gait * cw) x (bins * rows * ch). Each cell is the ant facing +x (screen right) with the light baked for its bin.
+// Manifest entry (JSON, or register() argument):
+//   { type: 'worker' | 0, side?: 0..3 (omit = every colony), src: 'worker.png', k, cw, ch, ox, oy, gait, rows, bins }
+//   k = device pixels per ant-unit in the sheet, size factor included (the painter's atlas k = q * UNITS[type].size); ox, oy = where the
+//   ant's origin sits inside a cell. render.js stamps at the real zoom by scaling k down or up, so a sheet needs no repaint on zoom.
+(function (root) {
+  'use strict';
+  const entries = new Map(); // 'side:type' or 'type' -> { m, img, state: 'loading' | 'ready' | 'failed' }
+  const api = {
+    ver: 0, // bumps whenever a sheet becomes ready or is removed: render.js rebuilds the affected atlases
+    imageFactory: () => new root.Image(), // tests replace it
+    typeIndex(type) {
+      if (Number.isInteger(type) && type >= 0) return type;
+      const U = root.UnitArt && root.UnitArt.UNITS;
+      const i = U ? U.findIndex(u => u.id === type) : -1;
+      return i;
+    },
+    key(side, type) { return side == null ? String(type) : side + ':' + type; },
+    // Start loading one sheet. Returns the entry (state flips to 'ready' or 'failed'), or null for a manifest that cannot be used.
+    register(m, base = '') {
+      const t = api.typeIndex(m && m.type);
+      const pos = f => Number.isFinite(m[f]) && m[f] > 0;
+      const ok = m && t >= 0 && typeof m.src === 'string' && ['k', 'cw', 'ch', 'gait', 'rows', 'bins'].every(pos) && Number.isFinite(m.ox) && Number.isFinite(m.oy);
+      if (!ok) return null;
+      const e = { m: Object.assign({}, m, { type: t }), img: null, state: 'loading' };
+      const key = api.key(m.side, t);
+      entries.set(key, e);
+      const img = e.img = api.imageFactory();
+      img.onload = () => { if (entries.get(key) === e) { e.state = 'ready'; api.ver++; } };
+      img.onerror = () => { if (entries.get(key) === e) { e.state = 'failed'; if (root.console) console.warn('atlas-loader: could not load ' + m.src + '; the painter stays in charge'); } };
+      img.crossOrigin = 'anonymous'; // before src: sheets from another origin (a CDN) stay readable by the canvas
+      img.src = base + m.src;
+      return e;
+    },
+    remove(side, type) { const k = api.key(side, api.typeIndex(type)); if (entries.delete(k)) api.ver++; },
+    clear() { if (entries.size) { entries.clear(); api.ver++; } },
+    // The ready sheet for a colony and caste whose layout is `gait` x `rows`, or null (painter). A per-colony entry wins over an all-colony one.
+    sheet(side, type, gait, rows) {
+      const e = entries.get(api.key(side, type)) || entries.get(api.key(null, type));
+      if (!e || e.state !== 'ready') return null;
+      const m = e.m, img = e.img;
+      if (m.gait !== gait || m.rows !== rows) return null;
+      const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      if (w !== m.gait * m.cw || h !== m.bins * m.rows * m.ch) return null; // the PNG does not match its manifest
+      return { img, k: m.k, cw: m.cw, ch: m.ch, ox: m.ox, oy: m.oy, gait: m.gait, rows: m.rows, bins: m.bins };
+    },
+    state(side, type) { const e = entries.get(api.key(side, api.typeIndex(type))) || entries.get(api.key(null, api.typeIndex(type))); return e ? e.state : 'none'; },
+    // Fetch a manifest ({ sheets: [entry, ...] }) and register every sheet; src is resolved next to the manifest. Resolves to the number
+    // of sheets registered, 0 on any failure (the painter carries on).
+    async loadManifest(url, fetchFn = root.fetch && root.fetch.bind(root)) {
+      try {
+        const res = await fetchFn(url);
+        if (!res.ok) return 0;
+        const j = await res.json(), base = url.slice(0, url.lastIndexOf('/') + 1);
+        let n = 0;
+        for (const m of (j && j.sheets) || []) if (api.register(m, base)) n++;
+        return n;
+      } catch (_) { return 0; }
+    },
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.AtlasLoader = api;
+  // Opt-in for now (no PNG art ships yet): ?atlas=assets/atlas/manifest.json on the page URL.
+  try {
+    const q = root.location && /[?&]atlas=([\w./-]+)/.exec(root.location.search || '');
+    if (q && !q[1].includes('..') && !q[1].startsWith('/')) api.loadManifest(q[1]);
+  } catch (_) { /* no location (tests) */ }
+})(typeof window !== 'undefined' ? window : globalThis);

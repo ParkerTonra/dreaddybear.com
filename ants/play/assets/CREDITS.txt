@@ -1,0 +1,14 @@
+Ant Arena asset credits
+=======================
+
+Sound effects (public/assets/sfx/)
+  kenney-impact/  Kenney "Impact Sounds" 1.0, https://kenney.nl/assets/impact-sounds, CC0 (License.txt alongside)
+                  Used: impactPunch_medium x5, impactSoft_medium x5, impactPlate_heavy x3, impactSoft_heavy x3,
+                  impactGlass_light x3, impactMining x3, impactPlank_medium x3, impactBell_heavy x2, footstep_grass x3
+  kenney-scifi/   Kenney "Sci-Fi Sounds", https://kenney.nl/assets/sci-fi-sounds, CC0 (License.txt alongside)
+                  Used: slime_000, forceField x2, laserRetro x3, lowFrequency_explosion x2
+Files are the unmodified originals (already .ogg). Both packs are CC0: no credit is required; it is given anyway
+(Sound effects line in the ? help screen).
+Not used: the Monster Sound Pack (OGA, WAV only; needs conversion, see HANDOFF ant18/audio).
+ants.ogg: the game's own song (Parker, ants v2), looped in-game.
+dusk_colony.ogg, swarm.ogg: original placeholder tracks composed with Fontbard (Old School RuneScape soundfont), shuffled after ants.ogg.
