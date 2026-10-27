@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <link rel="stylesheet" href="css/styles.css">
 
     <!-- Load favicon-->
@@ -21,21 +22,25 @@
     <div id="header-placeholder"></div>
     <div id="navbar-placeholder"></div>
 
-    <main>
-        <section id="shows" class="card card--split" aria-labelledby="shows-heading">
-            <div>
-                <p class="eyebrow">Live</p>
-                <h1 id="shows-heading">Upcoming shows</h1>
-                <h3>Winter is Coming Ft Dreaddy Bear, GrayVoid, &amp; More!</h3>
-                <a class="btn" href="https://www.eventbrite.com/e/winter-is-coming-ft-dreaddy-bear-grayvoid-tickets-736916084847" target="_blank" rel="noopener noreferrer">Tickets</a>
+    <main class="home">
+        <section id="hero" class="hero card" aria-label="Featured"></section>
+
+        <section id="music" class="section" aria-label="Music"></section>
+
+        <section class="section" aria-labelledby="more-heading">
+            <div class="section__head">
+                <p class="eyebrow">More</p>
+                <h2 id="more-heading">Stuff to poke at</h2>
             </div>
-            <img src="assets/pictures/unison_lineup.jpg" alt="Unison Fest lineup flyer: Winter is Coming">
+            <div id="cards" class="tiles"></div>
         </section>
     </main>
 
     <div id="footer-placeholder"></div>
 
     <!-- jQuery loads the shared header, navbar and footer -->
+    <script src="/js/home-data.js"></script>
+    <script src="/js/home.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         $(function () {
