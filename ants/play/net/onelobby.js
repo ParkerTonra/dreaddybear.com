@@ -5,7 +5,7 @@
 
 export const GAME_ID = 'dev.parkwow.antarena';
 // Bump when snapshots or commands change shape; OneLobby won't mix clients with different netVersions.
-export const NET_VERSION = '1';
+export const NET_VERSION = '2'; // 2 (ant54): state messages are bytes (public/codec.js), not JSON text
 // Both ends drop a peer they haven't heard from in this long (OneLobby pings every 2 s).
 export const PEER_TIMEOUT_MS = 12000;
 
@@ -16,7 +16,9 @@ export async function dial(address, { OneLobby, kitOptions = {} } = {}) {
   const kit = new OneLobby({ gameId: GAME_ID, netVersion: NET_VERSION, mode: 'raw', lobbyServer: '', peerTimeoutMs: PEER_TIMEOUT_MS, ...kitOptions });
   const lobby = await kit.joinDirect(address);
   await lobby.ready; // the link to the host is open (a failure rejects, so the caller retries)
-  return lobby.asWebSocket();
+  const sock = lobby.asWebSocket({ binary: true }); // state arrives as bytes (public/codec.js); text messages too, codec.parse reads both
+  sock.sendFast = bytes => lobby.send(lobby.hostPeerId, bytes, { channel: 'fast' }); // state acks: tiny, unordered, a lost one costs nothing
+  return sock;
 }
 
 // OneLobby's browser bundle: served at the site root by server.js; a static copy of the game keeps it beside the page.
@@ -56,5 +58,5 @@ export function peerFailedNotice(peer, reason) {
 export async function hostGame({ OneLobby, kitOptions = {}, hostOptions = {} } = {}) {
   if (!OneLobby) ({ OneLobby } = await loadKit());
   const kit = new OneLobby({ gameId: GAME_ID, netVersion: NET_VERSION, mode: 'raw', lobbyServer: '', displayName: 'Ant Arena', peerTimeoutMs: PEER_TIMEOUT_MS, ...kitOptions });
-  return kit.hostNostr({ maxPlayers: 64, name: 'Ant Arena', rateLimit: { messages: 40, perMs: 2000 }, ...hostOptions });
+  return kit.hostNostr({ maxPlayers: 64, name: 'Ant Arena', rateLimit: { messages: 60, perMs: 2000 }, ...hostOptions });
 }

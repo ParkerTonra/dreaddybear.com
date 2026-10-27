@@ -87,21 +87,29 @@ function connect(mode) {
       netUnreachable(err); netRetry(mode); } });
 }
 
+let codec = null; // this connection's state decoder context (StateCodec.createRecvCtx)
+const VERSION_NOTICE = 'You and the host are running different versions of the game. Reload the page and try again.'; // same words as onelobby.mjs's VersionMismatch
+
 function attach(sock, mode) {
   ws = sock;
+  codec = StateCodec.createRecvCtx();
+  try { sock.binaryType = 'arraybuffer'; } catch {} // a real WebSocket delivers state as binary frames
   sock.onopen = () => { // OneLobby runs it even when the link opened before we got here
     netLastMsg = performance.now();
-    sock.send(JSON.stringify({ type: 'join', room: roomCode, mode, token: getToken() }));
+    sock.send(JSON.stringify({ type: 'join', room: roomCode, mode, token: getToken(), nv: StateCodec.NET_VERSION })); // nv: server.js refuses a page with another wire version
   };
   sock.onmessage = e => {
     if (sock !== ws) return;
     netLastMsg = performance.now();
-    const m = JSON.parse(e.data);
+    const m = StateCodec.parse(e.data, codec); // public/codec.js: JSON text or a state message; null = a state we cannot use
+    const ack = StateCodec.ackFor(codec); // every 2nd applied state, or "send me a keyframe" after one we could not use
+    if (ack) { try { (sock.sendFast || sock.send).call(sock, ack); } catch {} }
+    if (!m) return;
     netOnMessage(m); onMessage(m);
   };
   sock.onclose = e => {
     if (sock !== ws) return;
-    e.code === 4000 ? netStop('This colony was opened in another tab.') : netRetry(mode);
+    e.code === 4000 ? netStop('This colony was opened in another tab.') : e.code === 4001 ? netStop(VERSION_NOTICE) : netRetry(mode);
   };
 }
 
@@ -138,6 +146,7 @@ function netNotice(text, fadeMs) {
 }
 
 function netOnMessage(m) {
+  if (m.type === 'version-mismatch') { netStop(VERSION_NOTICE); return; } // server.js is about to close with 4001; no retry loop
   if (m.type === 'joined') {
     try { if (m.token) sessionStorage.setItem(`ant-token:${m.room}`, m.token); } catch {}
     if (netTries) netNotice(m.resumed ? 'Reconnected · back in control of your colony' : curr ? 'Reconnected · that match is gone, back in the room' : 'Reconnected', 4000);

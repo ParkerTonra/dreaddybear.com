@@ -49,6 +49,6 @@ for (const f of ["client.js", "host.js"]) rewrite(path.join(out, f), "import('./
 // Without ?dc= the page offers Host 1v1 / Host 2v2 (host.js: the node-server meta is empty in this copy).
 // The onelobby and share-base metas stay empty here (server.js fills them only when it serves the page).
 const left = readFileSync(path.join(out, "net", "onelobby.js"), "utf8") + readFileSync(path.join(out, "client.js"), "utf8") + readFileSync(path.join(out, "host.js"), "utf8");
-if (/\.mjs['"]/.test(left)) throw new Error("a .mjs import is left in the copy");
+if (/['"][^'"\s]*\.mjs['"]/.test(left)) throw new Error("a .mjs import is left in the copy");
 
 console.log(`Synced ${src} -> ${out}`);
