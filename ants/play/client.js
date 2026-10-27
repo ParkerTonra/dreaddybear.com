@@ -55,14 +55,24 @@ const getToken = () => { try { return sessionStorage.getItem(tokenKey()) || unde
 // to the server it came from over a WebSocket. Both hand attach() the same WebSocket-shaped socket.
 const oneLobby = document.querySelector('meta[name="onelobby"]')?.content === 'here' ? location.host : params.get('dc');
 let dialing = 0;
+// Browser host (host.js): this tab runs the game server itself, so the page plays over an in-memory socket instead of a
+// WebSocket or a OneLobby join. { socket(): Promise of a WebSocket-shaped socket, code, shareLink(room, mode) }; null otherwise.
+let localHost = null;
 
 function connect(mode) {
   clearTimeout(netTimer);
+  if (localHost) {
+    const n = ++dialing;
+    localHost.socket().then(
+      sock => { if (n === dialing && !netGaveUp) attach(sock, mode); else sock.close(); },
+      e => { if (n === dialing) { console.warn('Local host failed:', e); netRetry(mode); } });
+    return;
+  }
   if (!oneLobby) { attach(new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`), mode); return; }
   const n = ++dialing;
   import('./net/onelobby.js').then(m => m.dial(oneLobby)).then(
     sock => { if (n === dialing && !netGaveUp) attach(sock, mode); else sock.close(); },
-    e => { if (n === dialing) { console.warn('OneLobby join failed:', e); netRetry(mode); } });
+    e => { if (n === dialing) { console.warn('OneLobby join failed:', e); netUnreachable(e); netRetry(mode); } });
 }
 
 function attach(sock, mode) {
@@ -83,12 +93,23 @@ function attach(sock, mode) {
   };
 }
 
+// Why a join by code can fail, said plainly (netRetry would otherwise only show "reconnecting"). ice_failed: no WebRTC
+// route to the host (a browser host cannot open a router port, so two strict NATs cannot meet).
+let netWhy = '';
+function netUnreachable(e) {
+  const code = e && e.code;
+  netWhy = code === 'ice_failed' ? "Could not connect to the host's game: your networks block a direct link. Ask the host to run the downloadable Node host (it opens a router port)."
+    : code === 'direct_unreachable' ? 'Could not reach the Nostr relays. Check your connection.'
+    : code === 'unknown_code' || code === 'bad_code' ? "That join code doesn't match a running game. The host may have closed their tab." : '';
+}
+
 function netRetry(mode) {
   if (netGaveUp) return;
   const old = ws; ws = null;
   if (old) { old.onclose = old.onmessage = null; try { old.close(); } catch {} }
   const delay = Math.min(5000, 500 * 2 ** netTries++) * (0.75 + Math.random() * 0.5);
-  netNotice(`Connection lost · reconnecting… (try ${netTries})`);
+  netNotice(netWhy ? `${netWhy} · retrying… (try ${netTries})` : `Connection lost · reconnecting… (try ${netTries})`);
+  netWhy = '';
   netTimer = setTimeout(() => connect(mode), delay);
 }
 
@@ -130,9 +151,10 @@ addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
 
 // The WebSocket server sends a heartbeat every few seconds; silence means the tunnel died without closing.
 // OneLobby does this itself (peerTimeoutMs in net/onelobby.mjs) and closes the socket with 1006.
-setInterval(() => { if (!oneLobby && ws && ws.readyState === 1 && performance.now() - netLastMsg > 12000) netRetry(roomMode); }, 2000);
+setInterval(() => { if (!oneLobby && !localHost && ws && ws.readyState === 1 && performance.now() - netLastMsg > 12000) netRetry(roomMode); }, 2000);
 
 function setUrl() {
+  if (localHost) { $('share').value = localHost.code ? localHost.shareLink(roomCode, roomMode) : ''; return; } // reloading a host tab cannot rejoin: no ?room= in its URL
   const dc = params.get('dc');
   history.replaceState(null, '', `?room=${roomCode}&mode=${roomMode}${dc ? `&dc=${encodeURIComponent(dc)}` : ''}`);
   // A host's own tab is often http://localhost:3000 or a LAN address, which no friend can open; the server puts

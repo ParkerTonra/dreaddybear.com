@@ -33,17 +33,18 @@ cpSync(bundle, path.join(out, "onelobby.bundle.js"));
 function rewrite(file, from, to) {
   const text = readFileSync(file, "utf8");
   if (!text.includes(from)) throw new Error(`${path.relative(out, file)}: ${from} not found`);
-  writeFileSync(file, text.replace(from, to));
+  writeFileSync(file, text.replaceAll(from, to));
 }
 
 // net/onelobby.mjs -> .js, and its absolute bundle import becomes relative (the copy lives under /ants/play/).
 renameSync(path.join(out, "net", "onelobby.mjs"), path.join(out, "net", "onelobby.js"));
 rewrite(path.join(out, "net", "onelobby.js"), "'/onelobby.bundle.mjs'", "'../onelobby.bundle.js'");
-rewrite(path.join(out, "client.js"), "import('./net/onelobby.mjs')", "import('./net/onelobby.js')");
+rewrite(path.join(out, "net", "onelobby.js"), "'onelobby.bundle.mjs'", "'onelobby.bundle.js'");
+for (const f of ["client.js", "host.js"]) rewrite(path.join(out, f), "import('./net/onelobby.mjs')", "import('./net/onelobby.js')");
 
-// Without a join code there is nothing to play, so send the visitor to the join page.
+// Without ?dc= the page offers Host 1v1 / Host 2v2 (host.js: the node-server meta is empty in this copy).
 // The onelobby and share-base metas stay empty here (server.js fills them only when it serves the page).
-const redirect = `<script>if(!/[?&]dc=/.test(location.search))location.replace('/ants/');</script>`;
-rewrite(path.join(out, "index.html"), "<head>", `<head>${redirect}`);
+const left = readFileSync(path.join(out, "net", "onelobby.js"), "utf8") + readFileSync(path.join(out, "client.js"), "utf8") + readFileSync(path.join(out, "host.js"), "utf8");
+if (/\.mjs['"]/.test(left)) throw new Error("a .mjs import is left in the copy");
 
 console.log(`Synced ${src} -> ${out}`);
