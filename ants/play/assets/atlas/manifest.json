@@ -1,1 +1,56 @@
-{ "sheets": [] }
+{
+ "sheets": [
+  {
+   "type": "worker",
+   "src": "worker.0.png",
+   "k": 4,
+   "cw": 112,
+   "ch": 112,
+   "ox": 56,
+   "oy": 56,
+   "gait": 9,
+   "rows": 7,
+   "bins": 8,
+   "side": 0
+  },
+  {
+   "type": "worker",
+   "src": "worker.1.png",
+   "k": 4,
+   "cw": 112,
+   "ch": 112,
+   "ox": 56,
+   "oy": 56,
+   "gait": 9,
+   "rows": 7,
+   "bins": 8,
+   "side": 1
+  },
+  {
+   "type": "worker",
+   "src": "worker.2.png",
+   "k": 4,
+   "cw": 112,
+   "ch": 112,
+   "ox": 56,
+   "oy": 56,
+   "gait": 9,
+   "rows": 7,
+   "bins": 8,
+   "side": 2
+  },
+  {
+   "type": "worker",
+   "src": "worker.3.png",
+   "k": 4,
+   "cw": 112,
+   "ch": 112,
+   "ox": 56,
+   "oy": 56,
+   "gait": 9,
+   "rows": 7,
+   "bins": 8,
+   "side": 3
+  }
+ ]
+}
