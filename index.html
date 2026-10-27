@@ -1,16 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <!-- Character set -->
     <meta charset="UTF-8">
-
-    <!-- Metadata -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!-- Name of website-->
+    <meta name="color-scheme" content="light dark">
     <title>Dreaddy Bear</title>
-
-    <!--Stylesheet-->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="css/styles.css">
 
     <!-- Load favicon-->
@@ -18,51 +15,34 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon_io/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon_io/favicon-16x16.png">
     <link rel="manifest" href="/assets/favicon_io/site.webmanifest">
-
 </head>
 
 <body>
-    <!-- Header placeholder-->
     <div id="header-placeholder"></div>
-
-    <!--navbar placeholder ... load navbar-->
     <div id="navbar-placeholder"></div>
 
     <main>
-        <section id="music">
-            <h1>Upcoming shows:</h1>
-            <h3>Winter is Coming Ft Dreaddy Bear, GrayVoid, & More!</h3>
-            <h5><a href="https://www.eventbrite.com/e/winter-is-coming-ft-dreaddy-bear-grayvoid-tickets-736916084847" target="_blank">Tickets</a></h5>
-            <img src="assets/pictures/unison_lineup.jpg" alt="Unison Fest">
+        <section id="shows" class="card card--split" aria-labelledby="shows-heading">
+            <div>
+                <p class="eyebrow">Live</p>
+                <h1 id="shows-heading">Upcoming shows</h1>
+                <h3>Winter is Coming Ft Dreaddy Bear, GrayVoid, &amp; More!</h3>
+                <a class="btn" href="https://www.eventbrite.com/e/winter-is-coming-ft-dreaddy-bear-grayvoid-tickets-736916084847" target="_blank" rel="noopener noreferrer">Tickets</a>
+            </div>
+            <img src="assets/pictures/unison_lineup.jpg" alt="Unison Fest lineup flyer: Winter is Coming">
         </section>
     </main>
-    
-    <!--footer placeholder ... load footer-->
+
     <div id="footer-placeholder"></div>
 
+    <!-- jQuery loads the shared header, navbar and footer -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(function () {
+            $("#header-placeholder").load("/components/header.html");
+            $("#navbar-placeholder").load("/components/navbar.html");
+            $("#footer-placeholder").load("/components/footer.html");
+        });
+    </script>
 </body>
-
-<!-- jquery library -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> 
-
-<!-- script to load navbar -->
-<script> 
-    $(function() {
-        $("#navbar-placeholder").load("components/navbar.html");
-    });
- </script> 
- <!-- script to load header (todo) -->
- <script> 
-    $(function() {
-        $("#header-placeholder").load("components/header.html");
-    });
- </script>
-
- <!-- script to load footer (todo) -->
-<script> 
-    $(function() {
-        $("#footer-placeholder").load("components/footer.html");
-    });
-</script>
-
 </html>

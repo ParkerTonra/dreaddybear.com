@@ -1,63 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
     <title>Contact Us</title>
-    <link rel="stylesheet" href="../css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="../css/styles.css">
 
     <!-- Load favicon-->
     <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon_io/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon_io/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon_io/favicon-16x16.png">
     <link rel="manifest" href="/assets/favicon_io/site.webmanifest">
-
 </head>
 
 <body>
-    <!-- Header placeholder-->
     <div id="header-placeholder"></div>
-
-    <!--navbar placeholder ... load navbar-->
     <div id="navbar-placeholder"></div>
 
-    <h1>Contact Us</h1>
-    <form action="mailto:your@email.com" method="post" enctype="text/plain">
-        <label for="name">Name:</label><br>
-        <input type="text" id="name" name="name" required><br>
-        <label for="email">Email:</label><br>
-        <input type="email" id="email" name="email" required><br>
-        <label for="message">Message:</label><br>
-        <textarea id="message" name="message" rows="4" required></textarea><br>
-        <input type="submit" value="Send">
-        <input type="reset" value="Reset">
-    </form>
+    <main>
+        <h1>Contact Us</h1>
+        <form class="form" action="mailto:your@email.com" method="post" enctype="text/plain">
+            <label>Name <input type="text" id="name" name="name" required autocomplete="name"></label>
+            <label>Email <input type="email" id="email" name="email" required autocomplete="email"></label>
+            <label>Message <textarea id="message" name="message" rows="4" required></textarea></label>
+            <div><input type="submit" value="Send"> <input type="reset" value="Reset"></div>
+        </form>
+    </main>
 
-    <!-- footer placeholder ... load footer-->
     <div id="footer-placeholder"></div>
 
+    <!-- jQuery loads the shared header, navbar and footer -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(function () {
+            $("#header-placeholder").load("/components/header.html");
+            $("#navbar-placeholder").load("/components/navbar.html");
+            $("#footer-placeholder").load("/components/footer.html");
+        });
+    </script>
 </body>
-
-<!-- script to load navbar -->
-<script> 
-    $(function() {
-        $("#navbar-placeholder").load("/components/navbar.html");
-    });
- </script> 
- <!-- script to load header (todo) -->
- <script> 
-    $(function() {
-        $("#header-placeholder").load("/components/header.html");
-    });
- </script>
-
- <!-- script to load footer (todo) -->
-<script> 
-    $(function() {
-        $("#footer-placeholder").load("/components/footer.html");
-    });
-</script>
-
 </html>

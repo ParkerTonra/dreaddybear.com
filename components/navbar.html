@@ -1,6 +1,8 @@
-<nav>
-    <ul class="navbar">
-        <li><a href="/pages/playlist.html">Contact</a></li>
+<nav class="site-nav" aria-label="Main">
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">Menu</button>
+    <ul class="navbar" id="site-menu">
+        <li><a href="/index.html">Home</a></li>
+        <li><a href="/index.html#shows">Shows</a></li>
         <li>
             <a href="https://soundcloud.com/dreaddybear" target="_blank" rel="noopener noreferrer">Music</a>
             <ul class="submenu">
@@ -11,17 +13,30 @@
                 <li><a href="https://soundcloud.com/dreaddybear/444-twenty" target="_blank" rel="noopener noreferrer">Latest Mix</a></li>
             </ul>
         </li>
-        <li><a href="#">Shows</a></li>
         <li><a href="/pages/playlist.html">Spotify Playlist</a></li>
-        <li><a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank" rel="noopener noreferrer">Free stuff</a></li>
+        <li><a href="/pages/soundbored.html">Soundbored</a></li>
+        <li><a href="/ants/">Ants</a></li>
         <li>
             <a href="https://github.com/ParkerTonra" target="_blank" rel="noopener noreferrer">Github</a>
             <ul class="submenu">
                 <li><a href="/pages/wheel.html">Wheel</a></li>
             </ul>
         </li>
-        <li><a href="/pages/soundbored.html">Soundbored</a></li>
-        <li><a href="/ants/">Ants</a></li>
-        <li><a href="/index.html">Home</a></li>
+        <li><a href="/pages/playlist.html">Contact</a></li>
+        <li><a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank" rel="noopener noreferrer">Free stuff</a></li>
     </ul>
 </nav>
+<script>
+    (function () {
+        var nav = document.querySelector('.site-nav');
+        var btn = nav.querySelector('.nav-toggle');
+        btn.addEventListener('click', function () {
+            var open = nav.classList.toggle('open');
+            btn.setAttribute('aria-expanded', open);
+        });
+        var path = location.pathname.replace(/\/$/, '/index.html');
+        nav.querySelectorAll('.navbar > li > a[href^="/"]').forEach(function (a) {
+            if (a.getAttribute('href') === path) a.setAttribute('aria-current', 'page');
+        });
+    })();
+</script>

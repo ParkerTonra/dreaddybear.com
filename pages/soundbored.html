@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
     <title>🍝Dreaddy Bear's Soundbored🍝</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="../css/styles.css">
 
     <!-- Load favicon-->
@@ -11,56 +15,26 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon_io/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon_io/favicon-16x16.png">
     <link rel="manifest" href="/assets/favicon_io/site.webmanifest">
-
 </head>
-<body>
-    <!-- Header placeholder-->
-    <div id="header-placeholder"></div>
 
-    <!--navbar placeholder ... load navbar-->
+<body>
+    <div id="header-placeholder"></div>
     <div id="navbar-placeholder"></div>
 
     <main>
-        <iframe src="https://parkertonra.pythonanywhere.com/" width="100%" height="500" frameborder="0" scrolling="yes"></iframe>
+        <iframe class="embed embed--tall" title="Dreaddy Bear's Soundbored" src="https://parkertonra.pythonanywhere.com/"></iframe>
     </main>
 
-    <!--footer placeholder ... load footer-->
     <div id="footer-placeholder"></div>
 
+    <!-- jQuery loads the shared header, navbar and footer -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(function () {
+            $("#header-placeholder").load("/components/header.html");
+            $("#navbar-placeholder").load("/components/navbar.html");
+            $("#footer-placeholder").load("/components/footer.html");
+        });
+    </script>
 </body>
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-<!-- script to load navbar -->
-<script> 
-    $(function() {
-        $("#navbar-placeholder").load("/components/navbar.html");
-    });
- </script> 
- <!-- script to load header (todo) -->
- <script> 
-    $(function() {
-        $("#header-placeholder").load("/components/header.html");
-    });
- </script>
-
- <!-- script to load footer (todo) -->
-<script> 
-    $(function() {
-        $("#footer-placeholder").load("/components/footer.html");
-    });
-</script>
-
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
