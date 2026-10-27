@@ -54,7 +54,7 @@ const getToken = () => { try { return sessionStorage.getItem(tokenKey()) || unde
 // host, location.host; ?dc=CODE joins a host by join code from any copy of the game. Otherwise the page talks
 // to the server it came from over a WebSocket. Both hand attach() the same WebSocket-shaped socket.
 const oneLobby = document.querySelector('meta[name="onelobby"]')?.content === 'here' ? location.host : params.get('dc');
-let dialing = 0;
+let dialing = 0, netMod = null; // netMod: net/onelobby.mjs, for is(code, name) against OneLobby.ErrorCodes
 // Browser host (host.js): this tab runs the game server itself, so the page plays over an in-memory socket instead of a
 // WebSocket or a OneLobby join. { socket(): Promise of a WebSocket-shaped socket, code, shareLink(room, mode) }; null otherwise.
 let localHost = null;
@@ -70,7 +70,7 @@ function connect(mode) {
   }
   if (!oneLobby) { attach(new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`), mode); return; }
   const n = ++dialing;
-  import('./net/onelobby.js').then(m => m.dial(oneLobby)).then(
+  import('./net/onelobby.js').then(m => { netMod = m; return m.dial(oneLobby); }).then(
     sock => { if (n === dialing && !netGaveUp) attach(sock, mode); else sock.close(); },
     e => { if (n === dialing) { console.warn('OneLobby join failed:', e); netUnreachable(e); netRetry(mode); } });
 }
@@ -98,9 +98,10 @@ function attach(sock, mode) {
 let netWhy = '';
 function netUnreachable(e) {
   const code = e && e.code;
-  netWhy = code === 'ice_failed' ? "Could not connect to the host's game: your networks block a direct link. Ask the host to run the downloadable Node host (it opens a router port)."
-    : code === 'direct_unreachable' ? 'Could not reach the Nostr relays. Check your connection.'
-    : code === 'unknown_code' || code === 'bad_code' ? "That join code doesn't match a running game. The host may have closed their tab." : '';
+  const is = n => !!netMod && netMod.is(code, n);
+  netWhy = is('IceFailed') ? "Could not connect to the host's game: your networks block a direct link. Ask the host to run the downloadable Node host (it opens a router port)."
+    : is('DirectUnreachable') ? 'Could not reach the Nostr relays. Check your connection.'
+    : is('UnknownCode') || is('BadCode') ? "That join code doesn't match a running game. The host may have closed their tab." : '';
 }
 
 function netRetry(mode) {

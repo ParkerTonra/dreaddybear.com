@@ -10,7 +10,7 @@ export const NET_VERSION = '1';
 export const PEER_TIMEOUT_MS = 12000;
 
 // address: location.host when the page came from the host's OneLobby port, or a join code (?dc=CODE).
-// OneLobby defaults to the browser bundle the host serves; Node tests pass the package's class and a linkFactory.
+// OneLobby defaults to onelobby.bundle.js beside the page (document.baseURI, so a subpath copy works); Node tests pass the package's class and a linkFactory.
 export async function dial(address, { OneLobby, kitOptions = {} } = {}) {
   if (!OneLobby) ({ OneLobby } = await loadKit());
   const kit = new OneLobby({ gameId: GAME_ID, netVersion: NET_VERSION, mode: 'raw', lobbyServer: '', peerTimeoutMs: PEER_TIMEOUT_MS, ...kitOptions });
@@ -21,8 +21,21 @@ export async function dial(address, { OneLobby, kitOptions = {} } = {}) {
 
 // OneLobby's browser bundle: served at the site root by server.js; a static copy of the game keeps it beside the page.
 export async function loadKit() {
-  try { return await import('../onelobby.bundle.js'); }
-  catch { return await import(new URL('onelobby.bundle.js', document.baseURI).href); }
+  const kit = await import(new URL('onelobby.bundle.js', document.baseURI).href);
+  Object.assign(codes, kit.ErrorCodes);
+  return kit;
+}
+
+// OneLobby.ErrorCodes, filled in once the bundle has loaded (an error before that has no code to compare). Use
+// is(e.code, 'IceFailed') rather than a string literal.
+export const codes = {};
+export const is = (code, name) => !!code && codes[name] === code;
+
+// Host side: the line to show when a joiner never connected (lobby 'peerFailed'). reason: ice_failed, closed, timeout.
+export function peerFailedNotice(peer, reason) {
+  const name = peer && peer.name ? `"${peer.name}"` : 'A friend';
+  return reason === 'timeout' ? `${name} is taking long to connect. They keep their seat; a strict network may block the link.`
+    : `${name} could not connect (${reason}). A strict network may block the link; the Node host can open a router port.`;
 }
 
 // Browser host (host.js): hosts a Nostr-signaled lobby from this tab, no Node server and no open port. Resolves to the

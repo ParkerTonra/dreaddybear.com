@@ -41,10 +41,12 @@
     msg.classList.toggle('hidden', !text);
   }
 
+  // Keyed by OneLobby.ErrorCodes names (the string values are not repeated here); looked up with mod.is().
   const WHY = {
-    direct_unreachable: 'Could not reach any Nostr relay within 10 seconds. Check your connection (a firewall may block WebSockets), then try again.',
-    nostr_disabled: 'Nostr signaling is turned off, and a browser host has no other way to be reached.',
+    DirectUnreachable: 'Could not reach any Nostr relay within 10 seconds. Check your connection (a firewall may block WebSockets), then try again.',
+    NostrDisabled: 'Nostr signaling is turned off, and a browser host has no other way to be reached.',
   };
+  let mod = null;
 
   async function startHosting(mode) {
     if (starting || lobby) return;
@@ -53,7 +55,8 @@
     showMsg('Opening a game for friends… (up to 10 seconds)');
     try {
       const host = await ensureHost();
-      lobby = await (await import('./net/onelobby.js')).hostGame();
+      mod = await import('./net/onelobby.js');
+      lobby = await mod.hostGame();
       host.serve(lobby);
       localHost.code = lobby.joinCode;
       wireBar();
@@ -62,7 +65,7 @@
     } catch (e) {
       console.warn('Host failed:', e);
       lobby = null;
-      showMsg(WHY[e && e.code] || `Could not start hosting: ${e && e.message ? e.message : e}`, true);
+      showMsg((mod && Object.keys(WHY).map(k => mod.is(e && e.code, k) && WHY[k]).find(Boolean)) || `Could not start hosting: ${e && e.message ? e.message : e}`, true);
       $('host1').disabled = $('host2').disabled = false;
     } finally { starting = false; }
   }
@@ -72,6 +75,7 @@
   // ice_failed on their side; the Node host (`node server.js`, which opens a router port) is the way around that.
   function wireBar() {
     let lost = false;
+    let note = '', noteTimer = 0;
     const render = () => {
       const hidden = lobby.hostHidden;
       bar.classList.toggle('warn', hidden || lost);
@@ -79,9 +83,16 @@
         : lost ? '⚠ <b>Lost the Nostr relays.</b> Friends already connected keep playing; new friends cannot join right now.'
         : `Hosting · join code <code></code> · keep this tab open and visible`;
       const c = bar.querySelector('code'); if (c) c.textContent = lobby.joinCode;
+      if (note) { const d = document.createElement('div'); d.className = 'peer-note'; d.textContent = note; bar.append(d); bar.classList.add('warn'); }
     };
     lobby.on('hostHiddenChanged', render);
     lobby.on('serverLost', () => { lost = true; render(); });
+    // A joiner that never connected (ice_failed, closed their tab, or no link within 15 s): tell the host, then fade the line.
+    lobby.on('peerFailed', (peer, reason) => {
+      note = mod.peerFailedNotice(peer, reason);
+      clearTimeout(noteTimer); noteTimer = setTimeout(() => { note = ''; render(); }, 20000);
+      render();
+    });
     render();
     bar.classList.remove('hidden');
     addEventListener('pagehide', () => { try { lobby.leave(); } catch {} });

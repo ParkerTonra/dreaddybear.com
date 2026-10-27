@@ -4,78 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ant Arena - Dreaddy Bear</title>
-    <link rel="stylesheet" href="/css/styles.css">
-
-    <!-- Load favicon-->
-    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon_io/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon_io/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon_io/favicon-16x16.png">
-    <link rel="manifest" href="/assets/favicon_io/site.webmanifest">
-
-    <style>
-        #ants { max-width: 640px; margin: 0 auto 80px; padding: 0 16px; line-height: 1.5; }
-        #join { display: flex; gap: 8px; margin: 16px 0; }
-        #join input { flex: 1; min-width: 0; padding: 8px; font: 16px monospace; text-transform: uppercase; }
-        #join button { padding: 8px 20px; font-weight: bold; background: #6C63FF; color: #fff; border: 0; cursor: pointer; }
-        #ants .note { font-size: 14px; color: #bbb; }
-    </style>
+    <noscript><meta http-equiv="refresh" content="0; url=/ants/play/"></noscript>
+    <script>location.replace('/ants/play/' + location.search + location.hash);</script>
 </head>
-
 <body>
-    <!-- Header placeholder-->
-    <div id="header-placeholder"></div>
-
-    <!--navbar placeholder ... load navbar-->
-    <div id="navbar-placeholder"></div>
-
-    <main id="ants">
-        <h1>Ant Arena</h1>
-        <form id="join">
-            <input id="code" placeholder="Join code or link" aria-label="Join code" autocomplete="off">
-            <button type="submit">Join</button>
-        </form>
-        <p>
-            A 1v1 or 2v2 ant colony battle that runs in the browser. Gather food, hatch workers,
-            soldiers, spitters and other castes, evolve your colony, and wreck the enemy nests.
-        </p>
-
-        <h3>Play with a friend</h3>
-        <ol>
-            <li>The host opens <a href="/ants/play/">Host a game</a>, picks 1v1 or 2v2 and sends the join code or link. Keep that tab open and in front while you play.</li>
-            <li>Friends paste the code (or the whole link) above and press Join.</li>
-        </ol>
-        <p class="note">
-            Join codes go through free public relays, so nobody needs to open a port.
-            A few strict networks still can't connect; if Join times out, try the host's own link.
-        </p>
-    </main>
-
-    <!--footer placeholder ... load footer-->
-    <div id="footer-placeholder"></div>
+    <p><a href="/ants/play/">Play Ant Arena</a></p>
 </body>
-
-<!-- jquery library -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-<script>
-    $(function() {
-        $("#navbar-placeholder").load("/components/navbar.html");
-        $("#header-placeholder").load("/components/header.html");
-        $("#footer-placeholder").load("/components/footer.html");
-    });
-
-    // A pasted link keeps its whole query (dc, room, mode); a bare code becomes ?dc=CODE.
-    document.getElementById("join").addEventListener("submit", function(e) {
-        e.preventDefault();
-        var text = document.getElementById("code").value.trim();
-        if (!text) return;
-        var q = text.indexOf("?");
-        if (q >= 0 && /[?&]dc=/i.test(text)) {
-            location.href = "/ants/play/" + text.slice(q).split("#")[0];
-        } else {
-            location.href = "/ants/play/?dc=" + encodeURIComponent(text.toUpperCase());
-        }
-    });
-</script>
-
 </html>

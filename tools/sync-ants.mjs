@@ -22,8 +22,14 @@ if (!existsSync(path.join(src, "index.html"))) {
   process.exit(1);
 }
 
-// The OneLobby browser bundle (the game's server.js serves it at /onelobby.bundle.mjs).
-const bundle = createRequire(path.join(antsDir, "package.json")).resolve("onelobby/bundle");
+// The OneLobby browser bundle: the package ships it as onelobby.bundle.js too, the name the game loads
+// (through document.baseURI, so it sits beside the page).
+const bundleMjs = createRequire(path.join(antsDir, "package.json")).resolve("onelobby/bundle");
+const bundle = path.join(path.dirname(bundleMjs), "onelobby.bundle.js");
+if (!existsSync(bundle)) {
+  console.error(`No onelobby.bundle.js next to ${bundleMjs} (needs OneLobby 0.5.0-dev-b885b82 or newer)`);
+  process.exit(1);
+}
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
@@ -36,10 +42,8 @@ function rewrite(file, from, to) {
   writeFileSync(file, text.replaceAll(from, to));
 }
 
-// net/onelobby.mjs -> .js, and its absolute bundle import becomes relative (the copy lives under /ants/play/).
+// net/onelobby.mjs -> .js (the bundle is already onelobby.bundle.js). ants/.htaccess (AddType for .js/.mjs) is not touched.
 renameSync(path.join(out, "net", "onelobby.mjs"), path.join(out, "net", "onelobby.js"));
-rewrite(path.join(out, "net", "onelobby.js"), "'/onelobby.bundle.mjs'", "'../onelobby.bundle.js'");
-rewrite(path.join(out, "net", "onelobby.js"), "'onelobby.bundle.mjs'", "'onelobby.bundle.js'");
 for (const f of ["client.js", "host.js"]) rewrite(path.join(out, f), "import('./net/onelobby.mjs')", "import('./net/onelobby.js')");
 
 // Without ?dc= the page offers Host 1v1 / Host 2v2 (host.js: the node-server meta is empty in this copy).
