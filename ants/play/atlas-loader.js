@@ -57,7 +57,7 @@
     // of sheets registered, 0 on any failure (the painter carries on).
     async loadManifest(url, fetchFn = root.fetch && root.fetch.bind(root)) {
       try {
-        const res = await fetchFn(url);
+        const res = await fetchFn(url, { cache: 'no-cache' }); // always revalidate: sheet file names carry a content hash, so a new bake is picked up at once
         if (!res.ok) return 0;
         const j = await res.json(), base = url.slice(0, url.lastIndexOf('/') + 1);
         let n = 0;

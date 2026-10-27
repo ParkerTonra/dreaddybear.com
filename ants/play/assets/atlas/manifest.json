@@ -2,7 +2,7 @@
  "sheets": [
   {
    "type": "worker",
-   "src": "worker.0.png",
+   "src": "worker.0.ec5d8062.png",
    "k": 4,
    "cw": 112,
    "ch": 112,
@@ -15,7 +15,7 @@
   },
   {
    "type": "worker",
-   "src": "worker.1.png",
+   "src": "worker.1.50e6dcd3.png",
    "k": 4,
    "cw": 112,
    "ch": 112,
@@ -28,7 +28,7 @@
   },
   {
    "type": "worker",
-   "src": "worker.2.png",
+   "src": "worker.2.06ba86ba.png",
    "k": 4,
    "cw": 112,
    "ch": 112,
@@ -41,7 +41,7 @@
   },
   {
    "type": "worker",
-   "src": "worker.3.png",
+   "src": "worker.3.ce84c231.png",
    "k": 4,
    "cw": 112,
    "ch": 112,
