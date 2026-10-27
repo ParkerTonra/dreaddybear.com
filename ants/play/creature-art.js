@@ -113,7 +113,12 @@
       const [hx, hy, fx] = legs[i], t = gait(f, i);
       const foot = [hx + fx + t.swing * 7 + dx, -t.lift * 6 + dy];
       leg(g, px, [[hx + dx, hy + dy], [hx + fx * 0.5 + t.swing * 3 + dx, -7 - t.lift * 3 + dy], foot], 5.6, col, hi);
-      if (i >= 2) { g.strokeStyle = '#efe6cf'; g.lineWidth = 1.2 * px + 0.3; g.lineCap = 'round'; for (const o of [-1.6, 0.4, 2.4]) { g.beginPath(); g.moveTo(foot[0] + o, foot[1]); g.lineTo(foot[0] + o + 3, foot[1] + 1.8); g.stroke(); } g.lineCap = 'butt'; }
+      // ant41: every foot gets a paw and claws (the hind pair used to end in bare stubs); hind claws are short, the front ones long
+      const front = i >= 2, cl = front ? 3 : 2.2;
+      ell(g, foot[0] + 1, foot[1] + 0.4, front ? 3.4 : 4.2, 2.1); g.fillStyle = col; g.fill(); g.strokeStyle = INK; g.lineWidth = 1 * px; g.stroke();
+      g.strokeStyle = '#efe6cf'; g.lineWidth = 1.2 * px + 0.3; g.lineCap = 'round';
+      for (const o of front ? [-1.6, 0.4, 2.4] : [-1, 1.2, 3.4]) { g.beginPath(); g.moveTo(foot[0] + o, foot[1] + 0.4); g.lineTo(foot[0] + o + cl, foot[1] + 0.4 + cl * 0.6); g.stroke(); }
+      g.lineCap = 'butt';
     });
     drawLegs([0, 2], -3, -2, '#2a211a', null); // far legs
     g.beginPath(); g.moveTo(-34, -30); g.bezierCurveTo(-52, -62, -90, -62, -88, -30); g.bezierCurveTo(-84, -18, -66, -22, -52, -20); g.bezierCurveTo(-44, -18, -38, -18, -34, -18); g.closePath(); // tail plume

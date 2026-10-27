@@ -39,10 +39,10 @@ function join(mode) {
   roomCode = $('room').value.trim().toUpperCase() || 'LOBBY';
   roomMode = mode;
   setUrl();
-  connect(mode);
   $('join-form').classList.add('hidden');
   $('waiting').classList.remove('hidden');
   $('wait-msg').textContent = `Joining room ${roomCode}…`;
+  connect(mode); // after the card swap: connect() may send a static copy straight back to the home screen
 }
 
 // ---------- Connection: auto-reconnect with backoff, rejoin our colony with a per-tab token ----------
@@ -58,6 +58,10 @@ let dialing = 0, netMod = null; // netMod: net/onelobby.mjs, for is(code, name) 
 // Browser host (host.js): this tab runs the game server itself, so the page plays over an in-memory socket instead of a
 // WebSocket or a OneLobby join. { socket(): Promise of a WebSocket-shaped socket, code, shareLink(room, mode) }; null otherwise.
 let localHost = null;
+// A static copy of the game (server.js fills the node-server meta with 1; a static host leaves it empty) has no game
+// server behind its own address, so it must never dial it: it joins by ?dc= code or hosts from the tab (host.js).
+const staticCopy = !document.querySelector('meta[name="node-server"]')?.content;
+const NO_CODE = 'This link has no join code. Ask the host for the full link, or host your own game.';
 
 function connect(mode) {
   clearTimeout(netTimer);
@@ -66,6 +70,11 @@ function connect(mode) {
     localHost.socket().then(
       sock => { if (n === dialing && !netGaveUp) attach(sock, mode); else sock.close(); },
       e => { if (n === dialing) { console.warn('Local host failed:', e); netRetry(mode); } });
+    return;
+  }
+  if (!oneLobby && staticCopy) { // nothing to dial: back to the home screen with a plain message, no retry loop
+    $('waiting').classList.add('hidden'); $('join-form').classList.remove('hidden');
+    netNotice(NO_CODE, 10000);
     return;
   }
   if (!oneLobby) { attach(new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`), mode); return; }
@@ -526,4 +535,6 @@ resize();
 requestAnimationFrame(frame);
 
 // Share links (?room=X&mode=2v2) join straight away. Kept last so join() never hits an undeclared let.
-if (params.get('room')) join(params.get('mode') || '1v1');
+// On a static copy a ?room= without ?dc= means nothing (no server to hold the room): stay home, clean the URL, say why.
+if (params.get('room') && staticCopy && !oneLobby) { try { history.replaceState(null, '', location.pathname); } catch {} netNotice(NO_CODE, 10000); }
+else if (params.get('room')) join(params.get('mode') || '1v1');
