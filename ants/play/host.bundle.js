@@ -934,7 +934,7 @@ class Bot {
   // ---------- spending ----------
   spend(g, me, count, workers, army, threat, foeArmy) {
     const cfg = this.cfg;
-    if (count >= 60) return;
+    if (count >= G.MAX_ANTS) return;
     let want;
     if (workers < 3) want = 'worker';
     else if (threat && threat.nest === me) want = 'army';
@@ -1504,8 +1504,10 @@ module.exports = function installCastes(Game, { STATS, DT, AGGRO, REST }) {
 // Rule for new code in the ant loop: move ants with moveToward(), or call gridMove(a) after writing a.x/a.y.
 
 const FLEE_HOLD_S = 3; // a worker that fled waits this long after the last threat before foraging again
-const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const dist = (a, b) => { const dx = a.x - b.x, dy = a.y - b.y; return Math.sqrt(dx * dx + dy * dy); }; // sqrt, not Math.hypot: same value to the last bit or two, several times faster
+const clampM = (g, v) => Math.max(0.3, Math.min(g.map - 0.3, v));
 const CELL = 2; // grid cell size in tiles; most queries reach 0.5 to 4.5 tiles
+const cellOf = (v, n) => Math.min(n - 1, Math.max(0, (v / CELL) | 0));
 // Veterancy (ant34): a fighter credited with `kills` kills gets rank 1 / 2 (+10% / +20% damage and max HP, healed by the gain).
 // Credit goes to every enemy fighter whose current target was the dead ant and who stood in reach of it (spitters from range).
 const VET = [{ kills: 3, mul: 1.1 }, { kills: 8, mul: 1.2 }];
@@ -1530,8 +1532,8 @@ module.exports = ({ STATS, AGGRO, COMBAT: C }) => ({
   dropGrid() { this._grid = null; },
 
   gridCell(a) {
-    const n = this._grid.n, cl = v => Math.min(n - 1, Math.max(0, (v / CELL) | 0));
-    return (a.team * n + cl(a.y)) * n + cl(a.x);
+    const n = this._grid.n;
+    return (a.team * n + cellOf(a.y, n)) * n + cellOf(a.x, n);
   },
 
   gridAdd(a, ix = this.ants.indexOf(a)) {
@@ -1558,8 +1560,7 @@ module.exports = ({ STATS, AGGRO, COMBAT: C }) => ({
   gridNear(p, r, team, enemy) {
     const g = this._grid, out = this._near, n = g.n;
     out.length = 0;
-    const cl = v => Math.min(n - 1, Math.max(0, (v / CELL) | 0));
-    const x0 = cl(p.x - r), x1 = cl(p.x + r), y0 = cl(p.y - r), y1 = cl(p.y + r);
+    const x0 = cellOf(p.x - r, n), x1 = cellOf(p.x + r, n), y0 = cellOf(p.y - r, n), y1 = cellOf(p.y + r, n);
     for (let t = 0; t < g.teams; t++) {
       if ((t !== team) !== enemy) continue;
       for (let cy = y0; cy <= y1; cy++) {
@@ -1658,43 +1659,61 @@ module.exports = ({ STATS, AGGRO, COMBAT: C }) => ({
 
   // Workers outside their nest run from enemy soldiers that outnumber nearby friendly soldiers.
   // Returns true if the worker spent its tick fleeing.
+  // (ant56: staggering the scan every 2nd tick per worker was tried: it saved under 3% of the sim here and cost the hard bot
+  // its edge over normal in tests/bots.test.js, 7/12 vs 10/12, so every worker scans every tick.)
   workerFlee(a) {
     const home = this.players[a.colony].nest;
     if (dist(a, home) < C.HOME_STAND) return false; // swarm defense at the nest instead
     // Hunters chase workers; majors only bite what they bump into. Any friendly fighter counts as a guard.
-    const threats = this.enemiesNear(a.team, a, C.FLEE_RADIUS).filter(([b]) => b.type === 'soldier' || b.type === 'spitter');
-    if (!threats.length) {
-      // After a flee the worker backs off to FLEE_RADIUS + 1.5 from where the threat was, then waits there until
-      // FLEE_HOLD_S is up. Going straight back to foraging walked it into the same soldier again and again (a twitch
-      // with a period under a second).
-      if (a.fleeFrom && a.fleeUntil > this.time) {
-        const d = dist(a, a.fleeFrom);
-        if (d < C.FLEE_RADIUS + 1.5) {
-          const clampM = v => Math.max(0.3, Math.min(this.map - 0.3, v));
-          this.moveToward(a, clampM(a.x + (a.x - a.fleeFrom.x) / (d || 1) * 2), clampM(a.y + (a.y - a.fleeFrom.y) / (d || 1) * 2), STATS.worker.speed);
-        }
-        return true;
+    // One pass over the nearby enemies, no allocation: count the threats and add up the push away from them.
+    let threats = 0, fx = 0, fy = 0;
+    const R = C.FLEE_RADIUS;
+    if (this._grid) {
+      for (const b of this.gridNear(a, R, a.team, true)) {
+        if (b.hp <= 0 || (b.type !== 'soldier' && b.type !== 'spitter')) continue;
+        const d = dist(a, b);
+        if (d > R) continue;
+        threats++; fx += (a.x - b.x) / (d || 0.01); fy += (a.y - b.y) / (d || 0.01);
       }
-      a.fleeFrom = null;
-      return false;
+    } else {
+      for (const b of this.ants) {
+        if (b.team === a.team || b.hp <= 0 || (b.type !== 'soldier' && b.type !== 'spitter')) continue;
+        const d = dist(a, b);
+        if (d > R) continue;
+        threats++; fx += (a.x - b.x) / (d || 0.01); fy += (a.y - b.y) / (d || 0.01);
+      }
     }
+    if (!threats) return this.fleeHold(a);
     let guards = 0; // counts friendly fighters killed earlier this tick too, as it always has
-    for (const b of this._grid ? this.gridNear(a, C.FLEE_RADIUS, a.team, false) : this.ants) {
-      if (b.team === a.team && b.type !== 'worker' && dist(a, b) <= C.FLEE_RADIUS) guards++;
+    for (const b of this._grid ? this.gridNear(a, R, a.team, false) : this.ants) {
+      if (b.team === a.team && b.type !== 'worker' && dist(a, b) <= R) guards++;
     }
-    if (guards >= threats.length) return false;
+    if (guards >= threats) return false;
     // Run away from the threats, pulled toward home so the chase ends near friendly defenders.
-    let fx = 0, fy = 0;
-    for (const [b, d] of threats) { fx += (a.x - b.x) / (d || 0.01); fy += (a.y - b.y) / (d || 0.01); }
     const hd = dist(a, home) || 0.01;
-    fx = fx / threats.length * 2 + (home.x - a.x) / hd;
-    fy = fy / threats.length * 2 + (home.y - a.y) / hd;
+    fx = fx / threats * 2 + (home.x - a.x) / hd;
+    fy = fy / threats * 2 + (home.y - a.y) / hd;
     const fl = Math.hypot(fx, fy) || 1;
-    const clampM = v => Math.max(0.3, Math.min(this.map - 0.3, v));
-    a.fleeFrom = { x: a.x - fx / fl, y: a.y - fy / fl }; // where the threat is, roughly: the opposite of the run direction
+    const ux = fx / fl, uy = fy / fl;
+    a.fleeFrom = { x: a.x - ux, y: a.y - uy }; // where the threat is, roughly: the opposite of the run direction
     a.fleeUntil = this.time + FLEE_HOLD_S;
-    this.moveToward(a, clampM(a.x + fx / fl * 2), clampM(a.y + fy / fl * 2), STATS.worker.speed);
+    this.moveToward(a, clampM(this, a.x + ux * 2), clampM(this, a.y + uy * 2), STATS.worker.speed);
     return true;
+  },
+
+  // No threat in sight: after a flee the worker backs off to FLEE_RADIUS + 1.5 from where the threat was, then waits there until
+  // FLEE_HOLD_S is up. Going straight back to foraging walked it into the same soldier again and again (a twitch
+  // with a period under a second).
+  fleeHold(a) {
+    if (a.fleeFrom && a.fleeUntil > this.time) {
+      const d = dist(a, a.fleeFrom);
+      if (d < C.FLEE_RADIUS + 1.5) {
+        this.moveToward(a, clampM(this, a.x + (a.x - a.fleeFrom.x) / (d || 1) * 2), clampM(this, a.y + (a.y - a.fleeFrom.y) / (d || 1) * 2), STATS.worker.speed);
+      }
+      return true;
+    }
+    a.fleeFrom = null;
+    return false;
   },
 
   // Record recent damage per ant so the renderer can flash hit ants (snapshot tuple index 8), and credit kills.
@@ -2268,7 +2287,7 @@ const TYPE_IDS = { worker: 0, soldier: 1, spitter: 2, major: 3, nurse: 4, alate:
 const UNIT_TYPES = Object.keys(TYPE_IDS);
 const isUnit = t => typeof t === 'string' && Object.prototype.hasOwnProperty.call(TYPE_IDS, t);
 const NEST_HP = 400;
-const MAX_ANTS = 60;
+const MAX_ANTS = 250; // per colony (ant56; was 60). 1000 ants in a 2v2.
 const AGGRO = 3;
 // Combat AI tuning (see combat.js). Distances in tiles, times in seconds.
 const COMBAT = { TARGET_LEASH: 4, DEFEND_RADIUS: 4.5, DEFEND_LEASH: 9, FOCUS_WEIGHT: 1.5, SOLDIER_BIAS: 0.5, PREF_WEIGHT: 2, FLEE_RADIUS: 1.6, HOME_STAND: 2, HIT_FLASH: 0.3, SURROUND: 0.45, SURROUND_FROM: 1.2, SURROUND_STEP: 0.3, IGNORE_REACH: 0.8 }; // SURROUND*: ant17 approach spots around a foe (inside soldier reach), taken from this close
@@ -2794,7 +2813,7 @@ const ABILITIES = require("abilities.js"); // ant16: active abilities; wraps mov
 ABILITIES.install(Game, { STATS, DT, dist, clamp, ORDERS });
 
 module.exports = { Game, TICK_HZ, COST, MODES, SIZES, DEFAULT_SIZE, EVENTS, COLONY_NAMES, TEAM_NAMES };
-Object.assign(module.exports, { ECON, UPGRADES, STATS, PELLET_COST, TYPE_IDS, UNIT_TYPES, TECH });
+Object.assign(module.exports, { MAX_ANTS, ECON, UPGRADES, STATS, PELLET_COST, TYPE_IDS, UNIT_TYPES, TECH });
 module.exports.ABILITIES = ABILITIES.ABILITIES; // ant16
 module.exports.STRUCTURES = { KINDS: STRUCTURES.KINDS, KIND_IDS: STRUCTURES.KIND_IDS, RULES: STRUCTURES.RULES }; // ant16
 
