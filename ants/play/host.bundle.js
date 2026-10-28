@@ -2121,7 +2121,7 @@ function forTeam(g, snap, team, died = []) {
 // call (at the nest, always on the map), refuges, events and objectives stay public.
 function logPublic(l, see) {
   if (l.kind === 'research' || l.kind === 'event-loss') return false; // ant31: a colony's losses are its own business
-  if (l.kind === 'build' || l.kind === 'razed') return see(l.x, l.y);
+  if (l.kind === 'build' || l.kind === 'razed' || l.kind === 'hatch') return see(l.x, l.y);
   if (l.kind === 'built') return false; // no position: the structure itself shows up when seen
   if (l.kind === 'ability') return l.id === 'volley' || l.id === 'call' || see(l.x, l.y);
   return true;
@@ -2311,12 +2311,15 @@ const MODES = {
   '2v2': { players: 4, map: 28, food: 10, nests: m => [[3.5, 9.5], [m - 3.5, m - 9.5], [9.5, 3.5], [m - 9.5, m - 3.5]] },
 };
 // Match size (ant18/flow): the lobby slider. 'quick' is the original skirmish and must stay byte-for-byte what it was.
-// grow: tiles added to the map side; food: nest starting food; clock: multiplier on the objectives.js match clock.
-// Piles scale with map area. Nests, farms, lairs and the anteater line are all map-relative, so bots work unchanged.
+// side = round((mode map + grow) * scale) tiles; food: nest starting food; clock: multiplier on the objectives.js match clock.
+// ant62: Standard and Large are 1.5x the old side (1v1 32 -> 48, 40 -> 60; 2v2 36 -> 54, 44 -> 66); Huge has its own side per mode (side: 128 / 144, benched in tools/hugebench.js).
+// Food and clock grew with the trip lengths: a Standard farm decision is 19:12 (was 15:00), Large 27:00
+// (was 19:12), Huge 36:00. Piles scale with map area. Nests, farms, lairs and the anteater line are all map-relative, so bots work unchanged.
 const SIZES = {
-  quick: { name: 'Quick', grow: 0, food: 60, clock: 1 },
-  standard: { name: 'Standard', grow: 8, food: 100, clock: 1.25 },
-  large: { name: 'Large', grow: 16, food: 150, clock: 1.6 },
+  quick: { name: 'Quick', grow: 0, scale: 1, food: 60, clock: 1 },
+  standard: { name: 'Standard', grow: 8, scale: 1.5, food: 120, clock: 1.6 },
+  large: { name: 'Large', grow: 16, scale: 1.5, food: 180, clock: 2.25 },
+  huge: { name: 'Huge', grow: 0, scale: 1, side: { '1v1': 128, '2v2': 144 }, food: 300, clock: 3 },
 };
 const DEFAULT_SIZE = 'quick';
 const COLONY_NAMES = ['Red', 'Blue', 'Orange', 'Purple'];
@@ -2369,7 +2372,7 @@ class Game {
     const Z = SIZES[size];
     this.size = size;
     this.clockMul = Z.clock;
-    this.map = M.map + Z.grow;
+    this.map = (Z.side && Z.side[mode]) || Math.round((M.map + Z.grow) * (Z.scale || 1));
     this.seed = seed;
     this.rand = rng(seed);
     this.time = 0;
@@ -2424,8 +2427,8 @@ class Game {
     const p = this.players[colony];
     // isUnit (units.js) is an own-key check: a client sending unit '__proto__' or 'toString' must not hit Object.prototype.
     if (this.winner !== null || !p || !p.alive || !isUnit(type)) return false;
-    const src = from == null ? null : this.producer(colony, from);
-    if (from != null && !src) return false;
+    // ant62: `from` is ignored (old saved messages carry it); the hatch site follows the colony's flags (structures.js hatchSite).
+    const src = this.hatchSite(colony, type);
     let n = 0;
     for (const a of this.ants) if (a.colony === colony) n++;
     if (n >= MAX_ANTS) return false;
@@ -2452,6 +2455,7 @@ class Game {
     if (this._grid) this.gridAdd(this.ants[this.ants.length - 1], this.ants.length - 1);
     ORDERS.onSpawn(this, this.ants[this.ants.length - 1]); // worker rally flag (orders.js)
     if (this.stats) this.stats[colony].spawned++;
+    if (src && !free) this.log.push({ kind: 'hatch', colony, x: src.x, y: src.y }); // ant62: the client pops a "+1" over the outpost
     return true;
   }
 
@@ -2466,10 +2470,8 @@ class Game {
     }
     if (msg.type === 'spawn') this.spawn(colony, msg.unit, false, Number.isInteger(msg.from) ? msg.from : msg.from == null ? null : -1);
     else if (msg.type === 'rally' && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
-      // { type: 'rally', x, y, from? }: from = a finished outpost's id, omitted = the nest's flag.
-      const at = { x: clamp(msg.x, 0, this.map), y: clamp(msg.y, 0, this.map) };
-      if (msg.from == null) p.rally = at;
-      else { const s = this.producer(colony, msg.from); if (s) s.rally = at; }
+      // { type: 'rally', x, y }: the colony's one fighter flag (a `from` from old messages is ignored).
+      p.rally = { x: clamp(msg.x, 0, this.map), y: clamp(msg.y, 0, this.map) };
     }
     else if (msg.type === 'upgrade') this.upgrade(colony, msg.id, msg.cancel === true); // research.js
     else if (msg.type === 'order') ORDERS.applyOrder(this, colony, msg);
@@ -3703,8 +3705,8 @@ module.exports = ({ STATS, AGGRO, DT, dist, clamp, tickType }) => {
   // outpost's s.forage): a target on a food pile means "forage that pile", anywhere else "go there, then work as usual".
   function onSpawn(g, a) {
     if (a.type !== 'worker') return;
-    const p = g.players[a.colony], src = a.from != null ? g.producer(a.colony, a.from) : null;
-    const r = src ? src.forage : p && p.wrally;
+    const p = g.players[a.colony];
+    const r = p && p.wrally;
     if (!r) return;
     let pile = null, bd = WRALLY_PILE;
     for (const f of g.food) if (f.amount > 0 && Math.hypot(f.x - r.x, f.y - r.y) < bd) { bd = Math.hypot(f.x - r.x, f.y - r.y); pile = f; }
@@ -3718,14 +3720,12 @@ module.exports = ({ STATS, AGGRO, DT, dist, clamp, tickType }) => {
   function setForage(g, colony, msg) {
     const p = g.players[colony];
     if (g.winner !== null || !p || !p.alive) return false;
-    const src = msg.from == null ? null : g.producer(colony, msg.from);
-    if (msg.from != null && !src) return false;
     let at = null;
     if (msg.clear !== true) {
       if (!(Number.isFinite(msg.x) && Number.isFinite(msg.y))) return false;
       at = { x: clamp(msg.x, 0, g.map), y: clamp(msg.y, 0, g.map) };
     }
-    if (src) src.forage = at; else p.wrally = at;
+    p.wrally = at; // the colony's one worker target (a `from` from old messages is ignored)
     return true;
   }
 
@@ -5136,8 +5136,8 @@ module.exports = { serveRooms };
 // Colony structures (ant16), installed onto Game.prototype by game.js. Workers build them on the map for food:
 //   depot   Food cache: workers drop food here instead of walking home (pellets still go to the nest).
 //   mound   Acid mound: a defensive turret that lobs acid at enemy ants in range, splashing a clump.
-//   outpost Satellite nest: a second hatchery (spawn messages name it with `from`) with its own rally flag and
-//           worker forage target (s.rally, s.forage); workers drop food here; and if your nest falls while a finished outpost stands, the queen flees to it and
+//   outpost Satellite nest: a second hatchery (new ants hatch at the producer nearest the colony's rally flag / forage
+//           target); workers drop food here; and if your nest falls while a finished outpost stands, the queen flees to it and
 //           it becomes your new nest (smaller, at the outpost's hp). So to win you must raze outposts too.
 //   garden  Fungus garden (ant32): pays the colony directly, no trips. Base GARDEN.base food/s, plus GARDEN.tend per
 //           worker tending it (within TEND_REACH, at most GARDEN.tenders). Must stand within GARDEN.near of your own
@@ -5172,6 +5172,7 @@ const RULES = {
   ENEMY_CLEAR: 8, // min distance from every enemy nest
   SPACING: 1.6, // min distance from any nest or other structure
   FOOD_CLEAR: 2, // min distance from a food pile (a cache right on a pile made one worker worth ten)
+  FOOD_CLEAR_OUTPOST: 1, // ant62: an outpost may stand right beside a pile (that is what it is for); 2 blocked ~a third of the nest's reach
   EDGE: 1, // min distance from the board edge
   START_HP: 0.15, // a fresh site's share of full hp
   MAX_BUILDERS: 3,
@@ -5210,7 +5211,8 @@ module.exports = function installStructures(Game, { STATS, AGGRO, COMBAT, DT, cl
       if (q.team !== p.team && dist(at, q.nest) < RULES.ENEMY_CLEAR) return 'enemy';
     }
     if (this.structList().some(s => live(s) && dist(at, s) < RULES.SPACING)) return 'crowded';
-    if (this.food.some(f => f.amount > 0 && f.kind !== 'crumb' && dist(at, f) < RULES.FOOD_CLEAR)) return 'food-pile';
+    const clear = kind === 'outpost' ? RULES.FOOD_CLEAR_OUTPOST : RULES.FOOD_CLEAR;
+    if (this.food.some(f => f.amount > 0 && f.kind !== 'crumb' && dist(at, f) < clear)) return 'food-pile';
     const anchors = [p.nest, ...mine.filter(s => s.kind === 'outpost' && s.done)];
     if (!anchors.some(n => dist(at, n) <= (K.near || RULES.REACH))) return 'far';
     return null;
@@ -5227,7 +5229,6 @@ module.exports = function installStructures(Game, { STATS, AGGRO, COMBAT, DT, cl
       id: this.nextId++, colony, team: p.team, kind, x, y,
       hp: K.hp * RULES.START_HP, max: K.hp, progress: 0, done: false, cd: 0,
     };
-    this.outpostFlags(s);
     this.structList().push(s);
     // Builders: the listed workers of this colony, else the nearest few.
     const ids = Array.isArray(msg.ids) ? new Set(msg.ids.slice(0, RULES.MAX_IDS).filter(Number.isInteger)) : new Set();
@@ -5421,7 +5422,6 @@ module.exports = function installStructures(Game, { STATS, AGGRO, COMBAT, DT, cl
         .sort((a, b) => b.hp - a.hp || a.id - b.id)[0];
       if (!out) continue;
       p.nest = { x: out.x, y: out.y, hp: out.hp, max: out.max };
-      this.outpostFlags(out); p.rally = out.rally; p.wrally = out.forage; // the new nest keeps the outpost's flags
       out.hp = 0; out.refuge = true;
       this.log.push({ kind: 'refuge', colony: p.colony });
     }
@@ -5458,32 +5458,41 @@ module.exports = function installStructures(Game, { STATS, AGGRO, COMBAT, DT, cl
   P.producer = function (colony, id) {
     if (!Number.isInteger(id) || !this.structures) return null;
     const s = this.structures.find(q => q.id === id && q.colony === colony && q.kind === 'outpost' && q.done && q.hp > 0);
-    return s ? this.outpostFlags(s) : null;
+    return s || null;
   };
 
-  // An outpost's own flags: rally starts a third of the way to the map centre like a nest's; no forage target yet.
-  P.outpostFlags = function (s) {
-    if (s.kind === 'outpost' && !s.rally) {
-      const mid = this.map / 2;
-      s.rally = { x: s.x + (mid - s.x) * 0.3, y: s.y + (mid - s.y) * 0.3 };
-      s.forage = null;
-    }
-    return s;
-  };
-
-  // Where an ant gathers: its hatching outpost's flag while that outpost stands, else the nest's flag.
+  // Where an ant gathers: the colony's one fighter rally flag (outposts have no flags of their own since ant62).
   P.rallyOf = function (a) {
-    if (a.from != null) { const s = this.producer(a.colony, a.from); if (s) return s.rally; }
     return this.players[a.colony].rally;
+  };
+
+  // The producer (the nest, or a finished outpost) a new ant hatches at. Fighters: the one nearest the colony's rally
+  // flag. Workers: nearest the forage target, else nearest the least-claimed food pile. Returns the outpost, or null for the nest.
+  P.hatchSite = function (colony, type) {
+    const p = this.players[colony], outs = this.structList().filter(s => s.colony === colony && s.kind === 'outpost' && s.done && s.hp > 0);
+    if (!outs.length) return null;
+    let at = type === 'worker' ? p.wrally : p.rally;
+    if (type === 'worker' && !at) {
+      const claims = new Map();
+      for (const a of this.ants) if (a.colony === colony && a.type === 'worker' && a.target != null) claims.set(a.target, (claims.get(a.target) || 0) + 1);
+      let best = null, bk = Infinity;
+      for (const f of this.food) {
+        if (f.amount <= 0 || f.kind === 'crumb') continue;
+        const d = Math.min(dist(f, p.nest), ...outs.map(o => dist(f, o))), k = (claims.get(f.id) || 0) * 1000 + d;
+        if (k < bk) { bk = k; best = f; }
+      }
+      at = best;
+    }
+    if (!at) return null;
+    let site = null, bd = dist(at, p.nest);
+    for (const o of outs) { const d = dist(at, o); if (d < bd) { bd = d; site = o; } }
+    return site;
   };
 
   const baseSnapshot = P.snapshot;
   P.snapshot = function () {
     const snap = baseSnapshot.call(this);
     const r2 = v => Math.round(v * 100) / 100;
-    // Per-outpost flags (additive): [id, colony, rallyX, rallyY, forageX | null, forageY | null]; fog.js keeps your own.
-    snap.srally = this.structList().filter(s => s.kind === 'outpost' && s.done).map(s => this.outpostFlags(s))
-      .map(s => [s.id, s.colony, r2(s.rally.x), r2(s.rally.y), s.forage ? r2(s.forage.x) : null, s.forage ? r2(s.forage.y) : null]);
     snap.structures = this.structList().map(s => [s.id, s.colony, KIND_IDS[s.kind], r2(s.x), r2(s.y), Math.max(1, Math.ceil(s.hp / s.max * 100)), Math.floor(s.progress * 100)]);
     snap.players.forEach((q, i) => { if (this.players[i].nest.max) q.nest.max = this.players[i].nest.max; }); // a refuge nest is smaller
     return snap;
@@ -5537,6 +5546,7 @@ function rng(seed) {
   };
 }
 
+const N8X = [1, -1, 0, 0, 1, 1, -1, -1], N8Y = [0, 0, 1, -1, 1, -1, 1, -1], N8W = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
 const N8 = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]];
 
 class Terrain {
@@ -5623,51 +5633,63 @@ class Terrain {
   // Distance (in tiles, mud counts extra) from every open cell to `goal`. Diagonal steps need both side tiles open.
   field(goal) {
     let f = this.fields.get(goal);
-    if (f) return f;
+    if (f) { this.fields.delete(goal); this.fields.set(goal, f); return f; } // refresh: the oldest field is the one evicted
     const m = this.map, n = m * m, cells = this.cells;
     f = new Float32Array(n).fill(Infinity);
     f[goal] = 0;
-    // Binary heap of cell indices keyed by f[].
-    const heap = [goal];
-    const push = i => {
-      heap.push(i);
-      let k = heap.length - 1;
-      while (k > 0) { const p = (k - 1) >> 1; if (f[heap[p]] <= f[heap[k]]) break; [heap[p], heap[k]] = [heap[k], heap[p]]; k = p; }
+    // Binary min-heap of (key, cell) pairs in typed arrays; stale entries are skipped on pop (done[]). The distances are
+    // the shortest paths whatever the pop order of ties, so the field is identical to the old array-heap version.
+    let hk = this.heapK, hc = this.heapC;
+    if (!hk || hk.length < 4 * n + 16) { hk = this.heapK = new Float32Array(4 * n + 16); hc = this.heapC = new Int32Array(4 * n + 16); }
+    let size = 0;
+    const push = (key, cell) => {
+      if (size >= hk.length) { // grow (rare: every cell is pushed a few times at most)
+        const nk = new Float32Array(hk.length * 2), nc = new Int32Array(hc.length * 2); nk.set(hk); nc.set(hc);
+        hk = this.heapK = nk; hc = this.heapC = nc;
+      }
+      let k = size++;
+      while (k > 0) {
+        const p = (k - 1) >> 1;
+        if (hk[p] <= key) break;
+        hk[k] = hk[p]; hc[k] = hc[p]; k = p;
+      }
+      hk[k] = key; hc[k] = cell;
     };
-    const pop = () => {
-      const top = heap[0], last = heap.pop();
-      if (heap.length) {
-        heap[0] = last;
+    push(0, goal);
+    const done = new Uint8Array(n);
+    while (size > 0) {
+      const c = hc[0];
+      const lk = hk[--size], lc = hc[size];
+      if (size > 0) { // sift the last entry down from the root
         let k = 0;
         for (;;) {
-          const l = 2 * k + 1, r = l + 1;
-          let s = k;
-          if (l < heap.length && f[heap[l]] < f[heap[s]]) s = l;
-          if (r < heap.length && f[heap[r]] < f[heap[s]]) s = r;
-          if (s === k) break;
-          [heap[s], heap[k]] = [heap[k], heap[s]]; k = s;
+          let s = 2 * k + 1;
+          if (s >= size) break;
+          if (s + 1 < size && hk[s + 1] < hk[s]) s++;
+          if (hk[s] >= lk) break;
+          hk[k] = hk[s]; hc[k] = hc[s]; k = s;
         }
+        hk[k] = lk; hc[k] = lc;
       }
-      return top;
-    };
-    const done = new Uint8Array(n);
-    while (heap.length) {
-      const c = pop();
       if (done[c]) continue;
       done[c] = 1;
-      const cx = c % m, cy = (c / m) | 0;
-      for (const [ox, oy, w] of N8) {
+      const cx = c % m, cy = (c / m) | 0, fc = f[c];
+      for (let j = 0; j < 8; j++) {
+        const ox = N8X[j], oy = N8Y[j];
         const nx = cx + ox, ny = cy + oy;
         if (nx < 0 || ny < 0 || nx >= m || ny >= m) continue;
         const ni = ny * m + nx;
         if (cells[ni] === ROCK || done[ni]) continue;
         if (ox && oy && (cells[cy * m + nx] === ROCK || cells[ny * m + cx] === ROCK)) continue;
         // Cost of leaving a cell: ants are slow while standing in mud.
-        const d = f[c] + w * (cells[ni] === MUD ? MUD_COST : 1);
-        if (d < f[ni]) { f[ni] = d; push(ni); }
+        const d = fc + N8W[j] * (cells[ni] === MUD ? MUD_COST : 1);
+        if (d < f[ni]) { f[ni] = d; push(f[ni], ni); }
       }
     }
     this.fields.set(goal, f);
+    // Bounded cache: a Huge board's field is 4 bytes a tile, so keep about 256 MB of them (oldest out first).
+    const cap = Math.max(64, Math.floor(268435456 / (4 * n)));
+    if (this.fields.size > cap) this.fields.delete(this.fields.keys().next().value);
     return f;
   }
 

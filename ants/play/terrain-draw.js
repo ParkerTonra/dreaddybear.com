@@ -73,7 +73,7 @@
     const a = hash(ix, iy, s), b = hash(ix + 1, iy, s), c = hash(ix, iy + 1, s), d = hash(ix + 1, iy + 1, s);
     return (a + (b - a) * u) + ((c + (d - c) * u) - (a + (b - a) * u)) * v;
   }
-  const texelsPerTile = m => Math.max(16, Math.min(32, Math.round(768 / m)));
+  const texelsPerTile = m => Math.max(m >= 96 ? 12 : 16, Math.min(32, Math.round(768 / m))); // ant62: Huge boards (96+) drop to 12 texels a tile: a 144-tile ground is 1728 px, not 2304, and rebuilds in about half the time
 
   // Returns { size, R, data (RGBA), emitters: [[x, y]] } for a map of tile classes (0 open, 1 rock, 2 mud) and nests.
   function buildTexture(m, seed, cls, nests) {

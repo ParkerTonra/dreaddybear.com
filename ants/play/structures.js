@@ -10,11 +10,11 @@
   const KINDS = [ // index = kind id in the snapshot
     { id: 'depot', icon: '🍯', name: 'Food cache', cost: 50, max: 2, desc: 'Workers drop food here instead of walking home' },
     { id: 'mound', icon: '🌋', name: 'Acid mound', cost: 45, max: 3, desc: 'Turret: spits acid at enemy ants in range (majors shrug it off)' },
-    { id: 'outpost', icon: '⛺', name: 'Outpost', cost: 90, max: 1, desc: 'A second hatchery with its own rally flag: select it to hatch from it. If your nest falls, the colony moves in' },
+    { id: 'outpost', icon: '⛺', name: 'Outpost', cost: 90, max: 1, desc: 'A second hatchery: new ants hatch at the building nearest your rally flag (fighters) or worker flag (workers). Can stand right beside a food pile. If your nest falls, the colony moves in' },
     { id: 'garden', icon: '🍄', name: 'Fungus garden', cost: 60, max: 2, near: 5, desc: 'Grows food straight into the colony: 0.5/s alone, +0.4/s per worker tending it (2 max; its builders stay). Must be within 5 of your nest or outpost. Right-click it with workers selected to tend' },
   ];
   const GARDEN = 3, TEND_REACH = 0.9; // kind id; tender distance, as in structures.js
-  const RULES = { REACH: 11, ENEMY_CLEAR: 8, SPACING: 1.6, FOOD_CLEAR: 2, EDGE: 1, RANGE: 3.2 };
+  const RULES = { REACH: 11, ENEMY_CLEAR: 8, SPACING: 1.6, FOOD_CLEAR: 2, FOOD_CLEAR_OUTPOST: 1, EDGE: 1, RANGE: 3.2 };
   const WHY = { max: 'limit reached', food: 'not enough food', edge: 'too close to the edge', rock: 'blocked by rocks', crowded: 'too close to a nest or building', enemy: 'too close to an enemy nest', 'food-pile': 'on a food pile', far: 'too far from your nest / outpost (gardens: within 5)' };
   const $ = id => document.getElementById(id);
   let mode = -1; // kind index while placing
@@ -45,7 +45,8 @@
       if (p.team !== me.team && d(p.nest, x, y) < RULES.ENEMY_CLEAR) return 'enemy';
     }
     if (list().some(s => Math.hypot(s[3] - x, s[4] - y) < RULES.SPACING)) return 'crowded';
-    if (curr.food.some(f => f[3] > 0 && f[4] !== 3 && Math.hypot(f[1] - x, f[2] - y) < RULES.FOOD_CLEAR)) return 'food-pile';
+    const clear = k === 2 ? RULES.FOOD_CLEAR_OUTPOST : RULES.FOOD_CLEAR; // k 2 = outpost
+    if (curr.food.some(f => f[3] > 0 && f[4] !== 3 && Math.hypot(f[1] - x, f[2] - y) < clear)) return 'food-pile';
     const anchors = [me.nest, ...mine.filter(s => s[2] === 2 && s[6] >= 100).map(s => ({ x: s[3], y: s[4] }))];
     if (!anchors.some(a => d(a, x, y) <= (K.near || RULES.REACH))) return 'far';
     return null;
@@ -184,15 +185,26 @@
       ctx.fillText(`+${(0.5 + 0.4 * tend).toFixed(1)}/s${tend < 2 ? ' · tend me' : ''}`, c.x, c.y + 18 * z); ctx.textAlign = 'start';
     }
   }
+  // Over the garden sprite: a faint glow that brightens while workers tend it, and what it pays right now.
+  function gardenExtras(c, z, done, now, ghost, s) {
+    const tend = done && !ghost ? Math.min(2, tenders(s)) : 0;
+    if (done && window.WorldArt && WorldArt.stampGlow) WorldArt.stampGlow(ctx, '#c9a0ff', c.x, c.y - 10 * z, (14 + tend * 3) * z, 0.16 + 0.1 * tend);
+    if (done && !ghost && s[1] === mySide) {
+      ctx.globalAlpha = 1; ctx.fillStyle = '#e8d6ff'; ctx.font = `600 ${Math.max(9, 11 * z)}px system-ui, sans-serif`; ctx.textAlign = 'center';
+      ctx.fillText(`+${(0.5 + 0.4 * tend).toFixed(1)}/s${tend < 2 ? ' · tend me' : ''}`, c.x, c.y + 18 * z); ctx.textAlign = 'start';
+    }
+  }
   function drawStructure(s, now) {
     const [, side, k, x, y, hp, built, ghost] = s, c = toScreen(x, y), z = scale, done = built >= 100; // ghost: fog.js last-seen
     ctx.save();
-    ctx.globalAlpha = (done ? 1 : 0.55 + 0.25 * built / 100) * (ghost ? 0.5 : 1);
+    const sprite = window.WorldArt && WorldArt.hasSheet && WorldArt.hasSheet(k); // sprite sites are opaque
+    ctx.globalAlpha = (done || sprite ? 1 : 0.55 + 0.25 * built / 100) * (ghost ? 0.5 : 1);
     ctx.lineWidth = 2 * z; ctx.strokeStyle = COLORS[side]; // colony ring on the ground: who owns it, at any zoom
     ctx.beginPath(); ctx.ellipse(c.x, c.y, 24 * z, 11 * z, 0, 0, Math.PI * 2); ctx.stroke();
-    if (k === GARDEN) drawGarden(c, z, side, done, now, s[0], ghost, s);
+    if (k === GARDEN && !(window.WorldArt && WorldArt.hasSheet && WorldArt.hasSheet(k))) drawGarden(c, z, side, done, now, s[0], ghost, s);
+    else if (k === GARDEN) { WorldArt.drawStructure(ctx, k, c, z, side, done, now, s[0]); gardenExtras(c, z, done, now, ghost, s); } // building-art.js sprite
     else if (window.WorldArt) WorldArt.drawStructure(ctx, k, c, z, side, done, now, s[0]); // ant18/ground: world-art.js (cached sprite + live glow)
-    if (!done) { // scaffolding twigs
+    if (!done && !(window.WorldArt && WorldArt.hasSheet && WorldArt.hasSheet(k))) { // scaffolding twigs (the sprite site has its own stakes)
       ctx.globalAlpha = 1; ctx.strokeStyle = '#d8b878'; ctx.lineWidth = 1.5 * z;
       ctx.setLineDash && ctx.setLineDash([4 * z, 3 * z]);
       ctx.beginPath(); ctx.ellipse(c.x, c.y - 8 * z, 22 * z, 18 * z, 0, Math.PI, 0); ctx.stroke();

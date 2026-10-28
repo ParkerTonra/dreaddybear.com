@@ -234,6 +234,7 @@ function onMessage(m) {
       if (l.kind === 'event') banner = { ...l, shownAt: performance.now() };
       if (l.kind === 'win') showEnd(l.team, l.reason);
       if (l.kind === 'event-loss') hudEventLoss(l); // ant31 ledger: "Earthquake took 4 of your ants"
+      if (l.kind === 'hatch') hatchPops.push({ x: l.x, y: l.y, at: performance.now(), colony: l.colony }); // ant62: "+1" over the outpost that hatched an ant
     }
     updateHud();
     if (window.Flow) Flow.onState(curr, mySide); // ant18: pacing toasts, tutorial steps
@@ -313,7 +314,7 @@ function updateHud() {
     for (const u of UNITS) $(`b-${u.id}`).disabled = !me.alive || me.food < u.cost || (me.pellets || 0) < (u.pellets || 0) || (u.tech && !teched);
     // Only claim a teammate fights on when one really does (never in 1v1, never after the match ended).
     const mateUp = s.winner === null && s.players.some((p, i) => i !== mySide && p.alive && p.team === me.team);
-    $('hud-bottom').querySelector('.hint').textContent = me.alive ? 'Click your nest to set its rally flag' : mateUp ? 'Your nest fell. Your teammate fights on!' : 'Your nest fell.';
+    $('hud-bottom').querySelector('.hint').textContent = me.alive ? 'Press E, then click ground (fighters) or food (workers) to plant the rally flag' : mateUp ? 'Your nest fell. Your teammate fights on!' : 'Your nest fell.';
   }
   hudButtons(s);
 }
@@ -410,7 +411,13 @@ function rallyPoint(p, now) {
 function drawBuildingFlags(now) {
   const B = window.Orders && Orders.building ? Orders.building() : null;
   if (B && window.UIWorld) { const c = toScreen(B.x, B.y); UIWorld.rings(ctx, [{ x: c.x, y: c.y + 2 * scale, k: scale * (B.kind === 'nest' ? 3.4 : 2.5) }], { now, noTicks: true }); } // selection ring under any selected building
-  if (!B || !B.producer || mySide < 0 || !curr.players[mySide].alive) { rallyAt = null; return; }
+  const armed = window.Orders && Orders.mode && Orders.mode() === 'rally' && mySide >= 0 && curr.players[mySide].alive; // E armed the colony rally: show the flags with nothing selected
+  if (!armed && (!B || !B.producer || mySide < 0 || !curr.players[mySide].alive)) { rallyAt = null; return; }
+  const me = curr.players[mySide], W = (curr.wrally && curr.wrally[mySide]) || null;
+  const bld = B && B.producer ? B : { kind: 'nest', x: me.nest.x, y: me.nest.y, rally: me.rally, forage: W };
+  drawColonyFlags(bld, now);
+}
+function drawColonyFlags(B, now) {
   const from = { x: B.x, y: B.y };
   if (B.forage) {
     const c = toScreen(B.forage.x, B.forage.y);
@@ -526,6 +533,7 @@ function drawFrame(now) {
   if (window.FX) FX.draw(ctx, now, toScreen, scale, COLORS);
   if (window.UnitArt) UnitArt.drawShots(ctx, now, toScreen, scale); // spitter acid
   drawBuildingFlags(now); // only the selected building's flags
+  drawHatchPops(now);
   if (window.Pings) Pings.draw(now); // teammates' rally flags + pings (pings.js)
 
   if (window.Abilities) Abilities.drawOver(now); // ant16: incoming acid volleys
@@ -534,6 +542,25 @@ function drawFrame(now) {
   drawWeather(now);
   drawNestAlarm(now);
   drawBanner(now);
+}
+
+// ant62: a small "+1" that floats up over an outpost when it hatches an ant (log entry 'hatch'). Reduced motion: it stays put and fades.
+const hatchPops = [], HATCH_POP_MS = 900;
+function drawHatchPops(now) {
+  if (!hatchPops.length) return;
+  const still = window.Settings && Settings.reduced();
+  while (hatchPops.length && now - hatchPops[0].at > HATCH_POP_MS) hatchPops.shift();
+  if (hatchPops.length > 40) hatchPops.splice(0, hatchPops.length - 40);
+  ctx.save();
+  ctx.font = `bold ${Math.round(14 * scale)}px sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3 * scale; ctx.strokeStyle = 'rgba(0,0,0,.65)';
+  for (const p of hatchPops) {
+    const t = (now - p.at) / HATCH_POP_MS, c = toScreen(p.x, p.y);
+    const y = c.y - (28 + (still ? 0 : 22 * t)) * scale;
+    ctx.globalAlpha = Math.max(0, 1 - t * t);
+    ctx.fillStyle = COLORS[p.colony] || '#fff';
+    ctx.strokeText('+1', c.x, y); ctx.fillText('+1', c.x, y);
+  }
+  ctx.restore();
 }
 
 // A red edge flash while your own nest is being hit, so an attack reads even when you are looking elsewhere.

@@ -36,7 +36,8 @@
   Panel.addOrder({ id: 'home', label: '⌂ Home', action: 'order.home', run: viaOrders('home', 'order.home'), title: 'Selected ants go home [H]', when: () => true })
     .addOrder({ id: 'stop', label: '■ Stop', action: 'order.stop', run: viaOrders('stop', 'order.stop'), title: 'Stop where they are [S]', when: s => !!s && has('stop')() })
     .addOrder({ id: 'hold', label: '⛨ Hold', action: 'order.hold', run: viaOrders('hold', 'order.hold'), title: 'Hold position: never move, strike what is in reach [D]', when: s => !!s && has('hold')() })
-    .addOrder({ id: 'auto', label: '↺ Auto', action: 'order.auto', run: viaOrders('auto', 'order.auto'), title: 'Back to automatic behaviour [E]', when: some })
+    .addOrder({ id: 'auto', label: '↺ Auto', action: 'order.auto', run: viaOrders('auto', 'order.auto'), title: 'Back to automatic behaviour [Shift+E]', when: some })
+    .addOrder({ id: 'rally', label: '⚑ Rally', action: 'order.rally', run: () => root.Orders && root.Orders.setMode && root.Orders.setMode(root.Orders.mode() === 'rally' ? null : 'rally'), title: 'Plant the colony rally flag: click ground for fighters, food for workers [E]', when: () => true, bld: true })
     .addOrder({ id: 'deselect', label: '✕', action: 'cancel', run: viaOrders('deselect', 'cancel'), title: 'Deselect [Esc]', when: some })
     .addOrder({ id: 'all', label: 'All', action: 'select.all', title: 'Select all your ants [A]', when: none })
     .addOrder({ id: 'workers', label: 'Workers', action: 'select.workers', title: 'Select your workers [W]', when: none })
@@ -176,7 +177,7 @@
     const bar = `<div class="sp-row" data-tip="${B.name}: health"><span>❤ <b>${B.hp}</b>%</span><span class="sp-hp"><i style="width:${B.hp}%;background:${col}"></i></span></div>`;
     const build = B.done ? '' : `<div class="sp-row" data-tip="Under construction"><span>🔨 <b>${B.built}</b>%</span><span class="sp-hp"><i style="width:${B.built}%;background:#e8c070"></i></span></div>`;
     const hint = B.producer
-      ? `Hatches ants from here: spawn buttons and keys use this ${B.name.toLowerCase()}. Right-click ground: its fighters gather there · right-click food: its new workers forage there${B.forage ? ' · right-click the building: clear that' : ''}.`
+      ? `Hatches ants from here: spawn buttons and keys use this ${B.name.toLowerCase()}. The colony has one rally flag: right-click ground for the fighters, food for the workers (new ants hatch at the building nearest it)${B.forage ? ' · right-click the building: clear the worker flag' : ''}. Press E to plant it without selecting anything.`
       : !B.done ? 'Workers are still building it.'
       : B.type === 0 ? 'Workers drop food here instead of walking home.'
       : B.type === 1 ? 'Spits acid at enemy ants in range that it can see (rocks block it).' : '';

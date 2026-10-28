@@ -64,7 +64,8 @@
   def('order.stop', 'Units', 'Stop', b('KeyS', SHIFT_ONLY));
   def('order.hold', 'Units', 'Hold position', b('KeyD', SHIFT_ONLY));
   def('order.home', 'Units', 'Go home', b('KeyH', SH));
-  def('order.auto', 'Units', 'Back to automatic', b('KeyE', SH));
+  def('order.auto', 'Units', 'Back to automatic', b('KeyE', SHIFT_ONLY));
+  def('order.rally', 'Units', 'Rally flag: arm, then click ground (fighters) or food (workers)', b('KeyE'));
   def('state.fire', 'Units', 'Fire state: cycle', b('KeyF', { ctrl: true, shift: ANY }));
   def('state.move', 'Units', 'Move state: cycle', b('KeyD', { ctrl: true, shift: ANY }));
   // Digits: recall (Shift adds to the selection) and save. Fixed: later lanes build on this digit family.
@@ -151,7 +152,7 @@
     return ks.filter(k => !k.soft || !Object.keys(overrides).some(o => o !== id && overlap(k, overrides[o])));
   };
   // The plain keys these actions had before WASD became pan. A saved copy of one is just the old default, not a choice.
-  const OLD_PLAIN = { 'select.workers': 'KeyW', 'select.all': 'KeyA', 'order.stop': 'KeyS', 'order.hold': 'KeyD' };
+  const OLD_PLAIN = { 'select.workers': 'KeyW', 'select.all': 'KeyA', 'order.stop': 'KeyS', 'order.hold': 'KeyD', 'order.auto': 'KeyE' };
 
   function conflictsFor(id, bd) {
     const me = byId[id];

@@ -1,0 +1,19 @@
+{
+ "src": "buildings.png",
+ "k": 3,
+ "cw": 80,
+ "ch": 72,
+ "ox": 40,
+ "oy": 46,
+ "cells": {
+  "garden": 0,
+  "depot": 1,
+  "mound": 2,
+  "site": 3
+ },
+ "rows": {
+  "base": 0,
+  "mask": 1
+ },
+ "unit": 22.0
+}

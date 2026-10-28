@@ -270,6 +270,7 @@
           <dt>Mixed armies</dt><dd>Attack-move and formation-line orders make a group of different speeds arrive together (everyone walks at the slowest one's pace). Plain move (<kbd>Ctrl</kbd>+right-click) never does, so retreats stay fast. New spitters and nurses wait a little behind the fighters' flag, toward home</dd>
           <dt data-keys="order.home"></dt><dd>Go home</dd>
           <dt data-keys="order.auto"></dt><dd>Back to automatic</dd>
+          <dt data-keys="order.rally"></dt><dd>Rally flag: arm, then click ground (fighters) or food (workers)</dd>
           <dt>Red lines</dt><dd>Selected ants' current targets (ring on the target)</dd>
           <dt data-keys="group.save"></dt><dd>Save control group</dd>
           <dt data-keys="group.recall"></dt><dd>Recall group (twice: centre on it)</dd>
@@ -342,7 +343,7 @@
     <div id="waiting" class="hidden">
       <p id="wait-msg">Waiting for players in room <b id="room-code"></b>…</p>
       <div id="slots"></div>
-      <div id="flow-size"><div>Match size</div><input type="range" id="size-range" min="0" max="2" step="1" value="0" aria-label="Match size"><div class="fl-ticks"><span>Quick</span><span>Standard</span><span>Large</span></div><div id="size-text"></div></div>
+      <div id="flow-size"><div>Match size</div><input type="range" id="size-range" min="0" max="3" step="1" value="0" aria-label="Match size"><div class="fl-ticks"><span>Quick</span><span>Standard</span><span>Large</span><span>Huge</span></div><div id="size-text"></div></div>
       <div class="link"><input id="share" readonly><button id="copy">Copy</button></div>
       <div id="start-row" class="modes hidden"><button id="start-match">▶ Start match</button></div>
       <div id="bot-fill" class="modes hidden"><select id="bot-diff" style="font:inherit;border-radius:8px;padding:6px"><option value="easy">Easy bots</option><option value="normal" selected>Normal bots</option><option value="hard">Hard bots</option></select><button id="fill-bots">🤖 Fill empty slots with bots</button></div>
@@ -372,6 +373,7 @@
 <script src="atlas-loader.js"></script><!-- ant26: PNG atlas seam for direction B; opt-in with ?atlas=<manifest url>, painter otherwise -->
 <script src="tod.js"></script><!-- ant19/tod: seed-picked time of day, one live wash -->
 <script src="terrain-draw.js"></script>
+<script src="building-art.js"></script><!-- ant61: Quaternius building sprites; painter when missing -->
 <script src="world-art.js"></script><!-- ant18/ground: nest, food, structure art -->
 <script src="creature-art.js"></script><!-- ant19/creatures: beetle, anteater, spider sprites -->
 <script src="decals.js"></script><!-- ant18/decals: wear, marks, dust, spores, critters -->

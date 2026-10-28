@@ -205,7 +205,7 @@
   const sprites = new Map();
   let spriteQ = 0, spriteVer = -1;
   function structSprite(k, side, done, q) {
-    const ver = TD() ? TD().version() : 0;
+    const BA = root.BuildingArt, ver = (TD() ? TD().version() : 0) + (BA ? BA.ver * 1000 : 0);
     if (q !== spriteQ || ver !== spriteVer) { spriteQ = q; spriteVer = ver; sprites.clear(); }
     const id = `${k}|${side}|${done ? 1 : 0}`;
     let S = sprites.get(id);
@@ -232,7 +232,11 @@
     g.beginPath(); g.ellipse(c.x, c.y - (hgt + 0.4) * s, (rx - 1) * s, (ry - 1) * s, 0, Math.PI * 1.05, Math.PI * 1.55); g.stroke();
   }
 
+  // Quaternius sprites (building-art.js): kind -> cell; an unfinished site shows the shared construction site. Outposts stay code-drawn.
+  const SHEET_CELL = { 0: 'depot', 1: 'mound', 3: 'garden' };
+  const hasSheet = k => !!(root.BuildingArt && SHEET_CELL[k] && root.BuildingArt.has(SHEET_CELL[k]));
   function paintStructure(g, c, s, k, side, done) {
+    if (hasSheet(k) && root.BuildingArt.paint(g, c, s, done ? SHEET_CELL[k] : 'site', COL()[side])) return;
     const col = COL()[side], dark = DK()[side], gl = GLOW[side];
     shadow(g, c, s, 22, 10, 22);
     if (k === 0) { // food cache: a scorched stone ring, a hex-plated lip, a core of glowing honey and pellets
@@ -280,15 +284,17 @@
 
   function structGlow(ctx, c, z, k, side, now, id, done) {
     const amb = TD() ? TD().ambient() : !reduced(), kk = glowK();
-    if (k === 1) {
+    const sheet = hasSheet(k);
+    if (k === 1) { // the vent glow sits on the acid pool of the sprite, or on the painter's spire
+      const gy = sheet ? c.y - 5 * z : c.y - 34 * z;
       const v = done ? 0.6 + 0.4 * (amb ? pulse(now / 260 + id) : 0.5) : 0.25;
-      stampGlow(ctx, '#a6ff3c', c.x, c.y - 34 * z, 14 * z, 0.55 * v * kk);
-      stampGlow(ctx, '#eaffa0', c.x, c.y - 34 * z, 5 * z, 0.5 * v);
+      stampGlow(ctx, '#a6ff3c', c.x, gy, 14 * z, 0.55 * v * kk);
+      stampGlow(ctx, '#eaffa0', c.x, gy, 5 * z, 0.5 * v);
     } else if (k === 2 && done) {
       const v = amb ? 0.5 + 0.5 * pulse(now / 400 + id) : 0.55;
       for (const vx of [-12, 11]) stampGlow(ctx, GLOW[side], c.x + vx * z, c.y - 6 * z, 6 * z, (0.4 + 0.4 * v) * kk);
       stampGlow(ctx, '#ffd9a0', c.x, c.y - 12 * z, 7 * z, 0.3 * kk);
-    } else if (k === 0 && done) {
+    } else if (k === 0 && done && !sheet) {
       stampGlow(ctx, '#ffc24a', c.x, c.y - 5 * z, 15 * z, (0.35 + (amb ? 0.08 * pulse(now / 700 + id) : 0)) * kk);
     }
   }
@@ -300,5 +306,5 @@
     structGlow(ctx, c, z, k, side, now, id, done);
   }
 
-  root.WorldArt = { nest, nestGlow, food, pellets, drawStructure, glow, stampGlow, GLOW, LIGHT, NEST_BOX: { L: 62, R: 74, T: 62, B: 40 }, shadow };
+  root.WorldArt = { nest, nestGlow, food, pellets, drawStructure, glow, stampGlow, GLOW, LIGHT, hasSheet, NEST_BOX: { L: 62, R: 74, T: 62, B: 40 }, shadow };
 })(typeof window !== 'undefined' ? window : globalThis);

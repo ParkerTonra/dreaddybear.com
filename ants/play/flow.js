@@ -6,11 +6,12 @@
   const $ = id => (doc ? doc.getElementById(id) : null);
 
   // ---------- Pure helpers ----------
-  const SIZES = ['quick', 'standard', 'large'];
+  const SIZES = ['quick', 'standard', 'large', 'huge'];
   const SIZE_TEXT = {
     quick: 'Quick · the classic skirmish: small map, 60 food, farms decide at 12:00',
-    standard: 'Standard · bigger map, 100 food each, more piles, farms decide at 15:00',
-    large: 'Large · the biggest map, 150 food each, farms decide at 19:12',
+    standard: 'Standard · bigger map (48 tiles), 120 food each, more piles, farms decide at 19:12',
+    large: 'Large · a big map (60 tiles), 180 food each, farms decide at 27:00',
+    huge: 'Huge · a 128-tile map (144 in 2v2), 300 food each, hundreds of piles, farms decide at 36:00. Long matches',
   };
   const fmt = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 

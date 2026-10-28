@@ -22,7 +22,7 @@ const FIRE_NAMES = ['Hold fire', 'Return fire', 'Fire at will'], MOVE_NAMES = ['
 const MAX_IDS = 60;
 const AREA_MIN = 0.5, AREA_MAX = 6, LINE_MIN = 0.6; // tiles; the server clamps areas too
 const LINE_GAP = 0.45, LINE_MAX = 14; // mirror orders.js: spacing along a formation line, longest line
-const MODE_TEXT = { attack: 'Attack-move: click a spot or an enemy · drag: area attack', patrol: 'Patrol: click the far end' };
+const MODE_TEXT = { attack: 'Attack-move: click a spot or an enemy · drag: area attack', patrol: 'Patrol: click the far end', rally: 'Rally flag: click ground for the fighters, food for the workers · E or Esc cancels' };
 const sel = new Set(); // selected ant ids (own colony only)
 const groups = {}; // digit -> [ant ids]; an ant is in at most one group (BAR)
 // Autogroups (BAR style, with a default preset so it works from the first match): caste type id -> group digit.
@@ -97,7 +97,7 @@ function setSel(ids, add) {
 }
 function setMode(m) {
   mode = m;
-  if (canvas.style) canvas.style.cursor = m ? 'crosshair' : '';
+  if (canvas.style) canvas.style.cursor = m === 'rally' ? CURSORS.rally : m ? 'crosshair' : '';
   updateReadout();
 }
 const mark = (w, color, cross, extra) => marks.push({ x: w.x, y: w.y, color, at: performance.now(), cross, ...extra });
@@ -148,10 +148,10 @@ function buildingInfo() {
   }
   const s = myStruct(bsel.id);
   if (!s) return null;
-  const done = s[6] >= 100, row = (curr.srally || []).find(r => r[0] === s[0] && r[1] === mySide);
+  const done = s[6] >= 100;
   return { kind: 'struct', id: s[0], type: s[2], name: STRUCT_NAMES[s[2]] || 'Building', icon: STRUCT_ICONS[s[2]] || '', x: s[3], y: s[4], hp: s[5], done, built: s[6],
     producer: s[2] === OUTPOST && done,
-    rally: row ? { x: row[2], y: row[3] } : null, forage: row && row[4] != null ? { x: row[4], y: row[5] } : null };
+    rally: me.rally || null, forage: (curr.wrally && curr.wrally[mySide]) || null }; // ant62: one colony rally and forage target
 }
 function pruneB() { if (bsel && !buildingInfo()) bsel = null; }
 function selectBuilding(b) {
@@ -159,8 +159,14 @@ function selectBuilding(b) {
   bsel = b ? { ...b } : null;
   updateReadout();
 }
-// Spawn / rally / forage messages name an outpost with `from`; the nest is the default and sends nothing.
-const producerMsg = () => { const B = buildingInfo(); return B && B.producer && B.kind === 'struct' ? { from: B.id } : {}; };
+// ant62: one rally flag and one forage target per colony; the server hatches at the producer nearest them. No `from` any more.
+const producerMsg = () => ({});
+// Plant the colony's flag at w: food -> workers' forage target, anywhere else -> the fighters' rally.
+function plantRally(w) {
+  const pile = curr.food.find(f => Math.hypot(f[1] - w.x, f[2] - w.y) < 1.2);
+  if (pile) { send({ type: 'forage', x: pile[1], y: pile[2] }); mark({ x: pile[1], y: pile[2] }, KIND_COLOR.forage); }
+  else { send({ type: 'rally', x: w.x, y: w.y }); mark(w, KIND_COLOR.rally); }
+}
 // Right-click (or tap) with a producer selected: food -> its new workers forage there; the building itself -> clear that;
 // ground -> its fighters gather there.
 function buildingOrder(w) {
@@ -343,6 +349,11 @@ function click(sx, sy, button, shift, ctrl, touch) {
   const w = screenToWorld(sx, sy);
   const onMap = w.x >= 0 && w.y >= 0 && w.x <= curr.map && w.y <= curr.map;
   const ant = antAt(sx, sy, Math.max(touch ? 24 : 12, 10 * scale), button === 2 || mode === 'attack');
+  if (mode === 'rally') { // E armed the colony rally: left- or right-click plants it, the selection is untouched
+    setMode(null);
+    if (onMap) plantRally(w);
+    return;
+  }
   if (mode) { // a pending F / P order: left-click (or tap) gives it, right-click cancels (StarCraft style)
     const m = mode;
     if (!shift || button === 2) setMode(null); // Shift keeps the mode for more waypoints
@@ -555,6 +566,7 @@ addEventListener('keydown', e => {
   else if (Keys.is(e, 'select.hurt')) setSel(hurtFighters(curr.ants, mySide), e.shiftKey);
   else if (Keys.is(e, 'order.stop')) simple('stop');
   else if (Keys.is(e, 'order.auto')) simple('auto');
+  else if (Keys.is(e, 'order.rally')) setMode(mode === 'rally' ? null : 'rally'); // E: arm / cancel, no producer or selection needed
   else if (Keys.is(e, 'order.hold')) simple('hold');
   else if (Keys.is(e, 'order.attack')) { if (sel.size) setMode('attack'); }
   else if (Keys.is(e, 'order.patrol')) { if (sel.size) setMode('patrol'); }
@@ -796,7 +808,8 @@ globalThis.Orders = { // window.Orders in the browser
   pref: () => prefOf(), setPref: guard(v => setPref(v)), // target priority dropdown (panel.js)
   FIRE_NAMES, MOVE_NAMES,
   mode: () => mode,
-  setMode: guard(m => setMode(m === 'attack' || m === 'patrol' ? m : null)), // wait for a map click
+  setMode: guard(m => setMode(m === 'attack' || m === 'patrol' || m === 'rally' ? m : null)), // wait for a map click
+  plantRally: guard(w => plantRally(w)), // ground = fighter rally, food = worker target
   cancelMode: () => setMode(null),
   // Another layer's "click the board next" prompt (abilities, build mode): html and what its ✕ / Esc does. null clears it.
   setPrompt: (html, cancel) => { extPrompt = html ? { html, cancel: cancel || (() => {}) } : null; updateReadout(); },

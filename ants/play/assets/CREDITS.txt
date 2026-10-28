@@ -16,3 +16,7 @@ dusk_colony.ogg, swarm.ogg: original placeholder tracks composed with Fontbard (
 3D model (rendered to the worker ant sprite sheet, assets-src/worker/; tools/blender/render-worker.py)
   "Ant 3D Model + Rigging + Animated (Low-poly-ish)" by mujtaba-io, https://opengameart.org/content/ant-3d-model-rigging-animated-low-poly-ish, CC0 (no credit required; given anyway)
   Rendered with Blender 4.2 LTS (a portable download, not committed). The model's own black material was replaced by a neutral one.
+
+3D models (rendered to the building sprite sheet, public/assets/buildings/; ants/tools/blender/render-building.py)
+  Quaternius "Nature Crops Pack" (Jan 2020: Mushroom_1..4, Wheat_Crop) and "Ultimate Nature Pack" (Jun 2019: TreeStump, WoodLog, Rock_1, Rock_Moss_1..7),
+  https://quaternius.com, CC0 (no credit required; given anyway). Rendered with Blender 4.2 LTS; materials recoloured, composed into small dioramas.
