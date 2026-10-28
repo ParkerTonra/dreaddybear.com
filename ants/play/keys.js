@@ -82,6 +82,7 @@
   def('cancel', 'Team', 'Cancel / close / deselect', b('Escape', ALLMODS), { ctx: 'global', rebind: false, help: false });
 
   def('game.pause', 'Team', 'Pause / resume (solo and Learn to play only)', [b('Pause'), b('F10')], { ctx: 'global' });
+  def('debug.perf', 'Team', 'Performance overlay (fps, frame and host timings)', b('F3'), { ctx: 'global', rebind: false }); // perf.js
 
   def('evo.dmg', 'Evolutions', 'Evolve Mandibles (Shift+key cancels)', b('KeyT', SH));
   def('evo.chitin', 'Evolutions', 'Evolve Chitin (Shift+key cancels)', b('KeyY', SH));

@@ -103,6 +103,7 @@ button:disabled { opacity: .45; }
   background: linear-gradient(180deg, #c4ff6a, #82d12b); }
 .modes button:hover, #copy:hover, #start-match:hover, #fill-bots:hover, .help-close:hover { filter: brightness(1.12) saturate(1.1); }
 #leave { background: linear-gradient(180deg, #2a3320, #161c10); color: var(--ink); border-color: var(--edge-hi); --cut-sm: 8px; text-transform: uppercase; letter-spacing: .1em; padding: 10px 18px; }
+#solo-back { background: linear-gradient(180deg, #2a3320, #161c10); color: var(--ink); border-color: var(--edge-hi); }
 #fill-bots { text-transform: none; letter-spacing: .03em; }
 
 input, select { font-family: var(--font); border-radius: 0 !important; border: 1px solid var(--edge-hi); background: #070b05; color: var(--acid);

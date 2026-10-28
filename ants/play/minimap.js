@@ -137,7 +137,9 @@
     box.classList.toggle('hidden', !show);
     if (!show) return;
     size();
+    const pf0 = root.Perf && Perf.t0(); // ant68: overlay timing
     draw(now);
+    if (pf0) Perf.add('minimap', pf0);
   }
   requestAnimationFrame(loop);
 

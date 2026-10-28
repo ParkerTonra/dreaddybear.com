@@ -85,7 +85,7 @@
   // cuts to Swarm when the first fight starts, and drifts back to calm after FIGHT_QUIET_S without one.
   const TRACKS = { lobby: ['ants'], calm: ['dusk_colony', 'ember_dusk'], fight: ['swarm'] };
   const FIGHT_QUIET_S = 30, FADE_MS = 700;
-  let music = null, trackNow = '', scene = 'lobby', fadeK = 1, fadeTimer = null, lastFight = -1e9;
+  let music = null, musicErr = '', trackNow = '', scene = 'lobby', fadeK = 1, fadeTimer = null, lastFight = -1e9;
   const musicVolume = () => MUSIC_VOL * vol.music * vol.master * fadeK;
   function nextTrack() { // shuffle, never the same track twice in a row
     const list = TRACKS[scene];
@@ -100,16 +100,30 @@
     clearInterval(fadeTimer);
     const t0 = Date.now();
     fadeTimer = setInterval(() => {
+      if (!music) { clearInterval(fadeTimer); fadeK = 1; return; } // ant67: this used to throw every 50 ms forever once the element was dropped
       const k = Math.max(0, 1 - (Date.now() - t0) / FADE_MS);
       fadeK = k; music.volume = musicVolume();
       if (k <= 0) { clearInterval(fadeTimer); fadeK = 1; playNext(first); }
     }, 50);
   }
+  // ant67: play() can be refused (autoplay policy: a gesture the browser does not count, e.g. a modifier key or a touchstart)
+  // or aborted (a newer load replaced it). The element is KEPT either way and the next gesture just calls play() again
+  // (resumeMusic). It used to be thrown away (music = null) with a fresh Audio built next time, which orphaned a playing old one.
+  function tryPlay() {
+    const m = music, p = m.play();
+    if (p && p.catch) p.catch(e => { musicErr = (e && e.name) || String(e); });
+  }
   function playNext(first) {
+    if (!music) return;
     trackNow = first || nextTrack();
     music.volume = musicVolume();
     music.src = 'assets/music/' + trackNow + '.ogg';
-    const p = music.play(); if (p && p.catch) p.catch(() => { music = null; }); // blocked: retry on the next gesture
+    tryPlay();
+  }
+  // Every gesture: if the element exists but is not playing (refused earlier), ask again.
+  function resumeMusic() {
+    if (!music) return;
+    if (!music.src) playNext(); else if (music.paused) tryPlay();
   }
   // Fight detection from snapshots: any ant flashing from a hit, or a nest losing hp, counts.
   function musicFromState(prev, curr) {
@@ -121,7 +135,8 @@
     else if (scene === 'fight' && now - lastFight > FIGHT_QUIET_S * 1000) setScene('calm');
   }
   function startMusic() {
-    if (music || !root.Audio) return;
+    if (music) { resumeMusic(); return; }
+    if (!root.Audio) return;
     try {
       music = new root.Audio();
       music.muted = muted;
@@ -391,7 +406,8 @@
   // ---------- DOM: unlock on first gesture, ',' key (ant16: M went to Build), speaker button ----------
   let btn = null;
   if (root.document && root.addEventListener) {
-    for (const ev of ['pointerdown', 'keydown', 'touchstart']) root.addEventListener(ev, unlock, { capture: true, passive: true });
+    // ant67: click/pointerup/keyup/touchend too: those are the gestures browsers always count for autoplay (a touchstart or a lone Shift never is)
+    for (const ev of ['pointerdown', 'pointerup', 'click', 'keydown', 'keyup', 'touchstart', 'touchend']) root.addEventListener(ev, unlock, { capture: true, passive: true });
     root.addEventListener('keydown', e => {
       if (e.target && e.target.tagName === 'INPUT') return;
       if (Keys.is(e, 'sound.mute')) toggle();
@@ -407,7 +423,7 @@
     if (root.document.body) mount(); else root.addEventListener('DOMContentLoaded', mount);
   }
 
-  const api = { play, onState, derive, makeThrottle, toggle, setMuted, isMuted: () => muted, setScene, setVolume, volume: k => vol[k], unlock, impact, strike, footstep, samplesReady: () => ready, HIT_STOP_MS, FAMILIES, STRIKES, CUE_SAMPLES, zoomGain, zoomCutoff, jitter, SAMPLE_VOICES, SFX_NAMES: Object.keys(SFX), MIN_GAP };
+  const api = { play, onState, derive, makeThrottle, toggle, setMuted, isMuted: () => muted, setScene, musicState: () => music ? { src: music.src, paused: music.paused, volume: music.volume, muted: music.muted, scene, track: trackNow, err: musicErr } : null, setVolume, volume: k => vol[k], unlock, impact, strike, footstep, samplesReady: () => ready, HIT_STOP_MS, FAMILIES, STRIKES, CUE_SAMPLES, zoomGain, zoomCutoff, jitter, SAMPLE_VOICES, SFX_NAMES: Object.keys(SFX), MIN_GAP };
   root.Sound = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -19,6 +19,8 @@
 
   // active: this tab is in a solo match (until it reloads to the menu). pending: the next lobby message gets the bot fill.
   const solo = { active: false, pending: false, manual: false, ...DEFAULTS };
+  let size = DEFAULTS.size; // the slider's pick while the settings step is open
+  const chooseSize = s => { if (SIZES.includes(s)) size = s; };
   let deps = null; // { join, useInTab, send }, from wire()
 
   function start(choice) {
@@ -89,8 +91,25 @@
     deps = d;
     const $ = id => root.document.getElementById(id);
     const c = load(root.localStorage);
-    $('solo-mode').value = c.mode; $('solo-diff').value = c.diff; $('solo-size').value = c.size;
-    $('solo-btn').onclick = () => start({ mode: $('solo-mode').value, diff: $('solo-diff').value, size: $('solo-size').value });
+    $('solo-mode').value = c.mode; $('solo-diff').value = c.diff;
+    // Play vs bots opens the settings step; nothing starts until Start. The size slider is the lobby's own (#flow-size),
+    // moved into the panel while it is open and returned on Back/Start; Flow's sink keeps it local (no set-size sent).
+    size = c.size;
+    const home = () => $('waiting').insertBefore($('flow-size'), $('waiting').querySelector('.link'));
+    const flow = root.Flow;
+    const show = on => {
+      $('join-form').classList.toggle('hidden', on); $('solo-panel').classList.toggle('hidden', !on);
+      if (on) {
+        $('solo-size-slot').appendChild($('flow-size'));
+        if (flow) { flow.setSizeSink(chooseSize); flow.showSize(size, false); }
+      } else { if (flow) flow.setSizeSink(null); home(); }
+    };
+    $('solo-btn').onclick = () => show(true);
+    $('solo-back').onclick = () => { save(root.localStorage, { mode: $('solo-mode').value, diff: $('solo-diff').value, size }); show(false); };
+    $('solo-start').onclick = () => {
+      const choice = { mode: $('solo-mode').value, diff: $('solo-diff').value, size };
+      show(false); start(choice);
+    };
     $('solo-again').onclick = again;
     $('solo-menu').onclick = () => { root.location.href = root.location.pathname; }; // a fresh page: in-tab server, bots and sockets all go
     $('pause-btn').onclick = togglePause;
@@ -101,6 +120,6 @@
     root.document.addEventListener('visibilitychange', () => { if (solo.active) deps.send({ type: 'pause', on: root.document.hidden, why: 'hidden' }); });
   }
 
-  root.Solo = { wire, onMessage, onEnd, start, again, togglePause, load, save, clean, state: solo, MODES, DIFFS, SIZES, DEFAULTS, KEY };
+  root.Solo = { wire, chooseSize, onMessage, onEnd, start, again, togglePause, load, save, clean, state: solo, MODES, DIFFS, SIZES, DEFAULTS, KEY };
   if (typeof module !== 'undefined') module.exports = root.Solo;
 })(typeof window !== 'undefined' ? window : globalThis);

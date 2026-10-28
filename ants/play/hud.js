@@ -178,4 +178,4 @@ function hudLayout() {
   if (hits()) pg.style.bottom = y + 'px';
 }
 addEventListener('resize', hudLayout);
-setInterval(hudLayout, 300);
+setInterval(() => { const pf0 = window.Perf && Perf.t0(); hudLayout(); if (pf0) Perf.add('panel', pf0); }, 300);

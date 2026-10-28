@@ -218,7 +218,7 @@
     if (ps.length && root.Camera && Camera.focusWorld) Camera.focusWorld(ps.reduce((t, a) => t + a[3], 0) / ps.length, ps.reduce((t, a) => t + a[4], 0) / ps.length);
     tick();
   });
-  setInterval(tick, 150);
+  setInterval(() => { const pf0 = root.Perf && Perf.t0(); tick(); if (pf0) Perf.add('panel', pf0); }, 150); // ant68: Perf = overlay timing
   root.addEventListener('keyup', () => setTimeout(tick, 0));
   root.addEventListener('pointerup', () => setTimeout(tick, 0));
 

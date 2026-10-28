@@ -26,16 +26,16 @@
 
   // ant17: SUB pixels per tile, each blended from the 4 nearest tile centres, so vision edges are rounded
   // instead of stair-stepped; seen-before and never-seen are further apart so the difference reads.
-  const api = { encode, decode, ALPHA_SEEN: 0.4, ALPHA_DARK: 0.74, SUB: 3, TINT: [14, 9, 18] }; // ant18/ground: dusk violet-black (was cold navy 8,12,22); alphas unchanged so the fog reads the same
+  const api = { encode, decode, ALPHA_SEEN: 0.4, ALPHA_DARK: 0.74, SUB: 1, TINT: [14, 9, 18] }; // ant18/ground: dusk violet-black (was cold navy 8,12,22); alphas unchanged so the fog reads the same
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
 
   const doc = root.document;
   const F = { key: '', seed: null, map: 0, grid: null, explored: null, canvas: null, img: null, rebuilds: 0 };
 
-  // Rebuild the fog canvas from a snapshot's grid (cheap: (SUB*map)^2 pixels, at most once per snapshot).
+  // Rebuild the fog canvas from a snapshot's grid (cheap: map^2 pixels, at most once per snapshot).
   function sync(s) {
     if (!s || !s.fog) return false;
-    const m = s.map, n = m * m, S = api.SUB, w = m * S;
+    const m = s.map, n = m * m, w = m * api.SUB;
     if (F.seed !== s.seed || F.map !== m) {
       F.seed = s.seed; F.map = m; F.key = '';
       F.grid = new Uint8Array(n); F.explored = new Uint8Array(n);
@@ -46,18 +46,13 @@
     F.key = s.fog.v;
     decode(s.fog.v, n, F.grid);
     for (let i = 0; i < n; i++) if (F.grid[i]) F.explored[i] = 1;
+    // ant66: one pixel per tile; the canvas's own bilinear smoothing (drawOn) does the soft edges the old 3x3 sub-pixel
+    // blend did, at 1/9 of the pixels (Huge: 16k instead of 147k, ~0.3 ms instead of ~6-11 ms).
     const d = F.img.data, seen = api.ALPHA_SEEN * 255, dark = api.ALPHA_DARK * 255, G = F.grid, E = F.explored;
-    const at = (arr, x, y) => arr[Math.min(m - 1, Math.max(0, y)) * m + Math.min(m - 1, Math.max(0, x))];
-    for (let py = 0; py < w; py++) {
-      const fy = (py + 0.5) / S - 0.5, y0 = Math.floor(fy), ty = fy - y0;
-      for (let px = 0; px < w; px++) {
-        const fx = (px + 0.5) / S - 0.5, x0 = Math.floor(fx), tx = fx - x0;
-        const lerp = arr => (at(arr, x0, y0) * (1 - tx) + at(arr, x0 + 1, y0) * tx) * (1 - ty) + (at(arr, x0, y0 + 1) * (1 - tx) + at(arr, x0 + 1, y0 + 1) * tx) * ty;
-        const vis = lerp(G), exp = lerp(E);
-        const j = (py * w + px) * 4;
-        d[j] = api.TINT[0]; d[j + 1] = api.TINT[1]; d[j + 2] = api.TINT[2];
-        d[j + 3] = Math.round((1 - vis) * (dark - (dark - seen) * exp));
-      }
+    const t0 = api.TINT[0], t1 = api.TINT[1], t2 = api.TINT[2];
+    for (let i = 0, j = 0; i < n; i++, j += 4) {
+      d[j] = t0; d[j + 1] = t1; d[j + 2] = t2;
+      d[j + 3] = G[i] ? 0 : Math.round(E[i] ? seen : dark);
     }
     F.canvas.getContext('2d').putImageData(F.img, 0, 0);
     F.rebuilds++;

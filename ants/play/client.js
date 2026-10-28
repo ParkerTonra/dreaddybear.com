@@ -101,11 +101,15 @@ function attach(sock, mode) {
   sock.onmessage = e => {
     if (sock !== ws) return;
     netLastMsg = performance.now();
+    const pf0 = window.Perf && Perf.t0();
     const m = StateCodec.parse(e.data, codec); // public/codec.js: JSON text or a state message; null = a state we cannot use
+    if (pf0) { Perf.ev('decode', performance.now() - pf0); Perf.bytes(e.data && (e.data.byteLength || e.data.length) || 0); }
     const ack = StateCodec.ackFor(codec); // every 2nd applied state, or "send me a keyframe" after one we could not use
     if (ack) { try { (sock.sendFast || sock.send).call(sock, ack); } catch {} }
     if (!m) return;
+    const pf1 = window.Perf && Perf.t0();
     netOnMessage(m); onMessage(m);
+    if (pf1) Perf.ev('apply', performance.now() - pf1);
   };
   sock.onclose = e => {
     if (sock !== ws) return;
@@ -236,7 +240,9 @@ function onMessage(m) {
       if (l.kind === 'event-loss') hudEventLoss(l); // ant31 ledger: "Earthquake took 4 of your ants"
       if (l.kind === 'hatch') hatchPops.push({ x: l.x, y: l.y, at: performance.now(), colony: l.colony }); // ant62: "+1" over the outpost that hatched an ant
     }
+    const pfh = window.Perf && Perf.t0();
     updateHud();
+    if (pfh) Perf.add('hud', pfh);
     if (window.Flow) Flow.onState(curr, mySide); // ant18: pacing toasts, tutorial steps
     if (window.Sound) Sound.onState(prev, curr, mySide);
     if (window.Alerts) Alerts.onState(prev, curr, mySide); // alerts.js: own ants hurt off-screen
@@ -343,7 +349,11 @@ function screenAngle(dir) {
 }
 
 // Backing-store pixels per CSS pixel, capped at 2: a 3x phone would pay 2.25x the fill for little visible gain.
-const pixelRatio = () => Math.min(2, devicePixelRatio || 1);
+// ant68: renderScale is the adaptive-quality factor (1 = full). A big screen with a slow raster path (4K-class backing store, Firefox without a
+// fast canvas path) is fill-rate bound: every full-screen layer (ground, decals, fog, wash, sprites) costs per backing pixel. adaptScale() below
+// steps the factor down when frames run long and never back up in the same match, so a slow machine trades sharpness for speed, not the sim.
+let renderScale = 1;
+const pixelRatio = () => Math.min(2, devicePixelRatio || 1) * renderScale;
 // Rounded, so frame()'s size check matches what the canvas actually holds (at 125% zoom innerWidth * dpr is often
 // fractional; canvas.width truncates it, and the old check then reallocated the canvas every single frame).
 const canvasSize = () => [Math.round(innerWidth * pixelRatio()), Math.round(innerHeight * pixelRatio())];
@@ -492,13 +502,34 @@ function drawBeetle(b, now) { // creature-art.js: cached sprite; attacks (head d
 // A draw call that throws mid-frame would leave ctx.save() unmatched and its alpha/transform leaking into every later frame
 // (the screen goes blank or faint). Reset the context each frame and report the first error of each kind once.
 const frameErrors = new Set();
+// Auto render scale. Samples rAF intervals (long stalls clamped so a hidden tab or a rebake hitch does not count); every 2.5 s, if the average is
+// over 30 ms (under ~33 fps), steps renderScale down one notch, as long as the backing store stays above ~1.2 million pixels. ?rscale=1 turns it off.
+const RSCALE_STEPS = [1, 0.8, 0.65, 0.5], RSCALE_MIN_PX = 1.2e6, RSCALE_SLOW_MS = 30;
+const rscaleFixed = params.get('rscale') !== null;
+let rscaleIdx = 0, rscaleAt = 0, rscaleSum = 0, rscaleN = 0, rscaleLast = 0;
+if (rscaleFixed) renderScale = Math.max(0.3, Math.min(1, Number(params.get('rscale')) || 1));
+function adaptScale(now) {
+  const dt = rscaleLast ? now - rscaleLast : 0; rscaleLast = now;
+  if (rscaleFixed || !curr || document.hidden) { rscaleN = rscaleSum = 0; return; }
+  if (dt > 0) { rscaleSum += Math.min(dt, 100); rscaleN++; }
+  if (!rscaleAt) rscaleAt = now + 6000; // let the first seconds of a match (sprite and layer baking) pass
+  if (now < rscaleAt || rscaleN < 30) return;
+  const avg = rscaleSum / rscaleN; rscaleSum = rscaleN = 0; rscaleAt = now + 2500;
+  if (avg <= RSCALE_SLOW_MS || rscaleIdx >= RSCALE_STEPS.length - 1) return;
+  const next = RSCALE_STEPS[rscaleIdx + 1], dpr = Math.min(2, devicePixelRatio || 1);
+  if (innerWidth * innerHeight * (dpr * next) ** 2 < RSCALE_MIN_PX) return;
+  rscaleIdx++; renderScale = next; rscaleAt = now + 4000; rscaleLast = 0;
+  resize();
+}
 function frame(now) {
   requestAnimationFrame(frame);
+  adaptScale(now);
+  if (window.Perf) Perf.frame(now); // ant68: overlay timing, a no-op while off
   const dpr = pixelRatio();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalAlpha = 1; ctx.setLineDash([]);
   ctx.clearRect(0, 0, innerWidth, innerHeight);
   if (!curr) return;
-  try { drawFrame(now); } catch (e) {
+  try { drawFrame(now); if (window.Perf) Perf.end(); } catch (e) {
     ctx.restore(); // the try may have thrown between save and restore; an extra restore on an empty stack is a no-op
     const k = String(e && e.message);
     if (!frameErrors.has(k)) { frameErrors.add(k); console.error('frame error:', e); }
@@ -507,8 +538,11 @@ function frame(now) {
 
 function drawFrame(now) {
   const v = view(now);
+  if (window.Perf) Perf.mark('prep');
   if (window.FX && FX.lastSnap !== v.to) { FX.onSnapshot(fxSnap, v.to, now); fxSnap = v.to; } // effects fire as the picture reaches them
+  if (window.Perf) Perf.mark('effects');
   if (window.Decals) Decals.onFrame(v.to, now); // ant18/decals: wear + marks from the same snapshot
+  if (window.Perf) Perf.mark('decals');
   const map = curr.map;
   const [cw, ch] = canvasSize();
   if (!scale || map !== sizedFor || canvas.width !== cw || canvas.height !== ch) resize();
@@ -519,22 +553,29 @@ function drawFrame(now) {
   ctx.save();
   if (quake && !(window.Settings && Settings.reduced())) ctx.translate((Math.random() - .5) * 2.5, (Math.random() - .5) * 1.5); // ant18: was 10 x 6 (too much); off in Reduced motion
 
+  if (window.Perf) Perf.mark('prep');
   drawGround(map); // render.js: the cached board layer
+  if (window.Perf) Perf.mark('ground');
   if (window.Decals) Decals.drawGround(ctx, now, toScreen, scale); // ant18/decals: wear, marks, dust
+  if (window.Perf) Perf.mark('decals');
   drawEventGround(now);
   if (window.Abilities) Abilities.drawGround(now); // ant16: trails, volley warnings, alarm marks
   if (window.Objectives) Objectives.drawGround(now); // ant16: aphid farms, spider lairs
   if (window.drawSelectionRings) drawSelectionRings(now); // input.js
+  if (window.Perf) Perf.mark('ground2');
 
   drawWorld(now); // render.js: ant shadows, corpses, then nests/food/ants/hazards depth-sorted by screen y
   if (window.Decals) Decals.drawAir(ctx, now, toScreen, scale); // ant18/decals: spores, embers, critters (under the fog)
+  if (window.Perf) Perf.mark('decals');
   if (window.Fog) Fog.drawOn(ctx, toScreen, v.to); // ant16 fog: one stretched blit over the world
+  if (window.Perf) Perf.mark('fog');
   if (window.Objectives) Objectives.drawTop(now); // ant16: lair spiders
   if (window.FX) FX.draw(ctx, now, toScreen, scale, COLORS);
   if (window.UnitArt) UnitArt.drawShots(ctx, now, toScreen, scale); // spitter acid
   drawBuildingFlags(now); // only the selected building's flags
   drawHatchPops(now);
   if (window.Pings) Pings.draw(now); // teammates' rally flags + pings (pings.js)
+  if (window.Perf) Perf.mark('effects');
 
   if (window.Abilities) Abilities.drawOver(now); // ant16: incoming acid volleys
   if (window.drawInputOverlay) drawInputOverlay(now); // input.js: drag box, order markers
@@ -542,6 +583,7 @@ function drawFrame(now) {
   drawWeather(now);
   drawNestAlarm(now);
   drawBanner(now);
+  if (window.Perf) Perf.mark('overlay');
 }
 
 // ant62: a small "+1" that floats up over an outpost when it hatches an ant (log entry 'hatch'). Reduced motion: it stays put and fades.

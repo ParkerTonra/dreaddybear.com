@@ -10,7 +10,11 @@
   const TW = 64, TH = 32;
 
   function createCamera(opts = {}) {
-    const minZoom = opts.minZoom || 1, maxZoom = opts.maxZoom || 4;
+    const minZoom = opts.minZoom || 1;
+    // ant67: the old fixed 4x felt too far out once the 3D ants were worth a close look. Max is 8x on a small board; on a big one the
+    // fit scale is tiny (Huge ~0.14), so the max grows until the tile scale (fit * zoom) can reach MAX_SCALE, the same close-up everywhere.
+    const MAX_SCALE = 6, ZOOM_FLOOR = 8, ZOOM_CEIL = 48;
+    let maxZoom = opts.maxZoom || ZOOM_FLOOR;
     let map = 24, fit = 1, ax = 0, ay = 0; // fit scale and the anchor (screen point the view centre sits on)
     let z = 1, tz = 1;                      // current / target zoom
     let cu = 0, cv = 0, tu = 0, tv = 0;    // current / target view centre
@@ -29,11 +33,13 @@
 
     const cam = {
       TW, TH,
+      maxZoom: () => maxZoom,
       // Same fit as the original client.js resize(): whole board between the top HUD and bottom bar.
       layout(m, w, h, top = 90, bottom = 100) {
         if (m !== map) { map = m; cam.reset(true); }
         fit = Math.max(0.05, Math.min(w / (m * TW) * 0.96, (h - top - bottom) / (m * TH)));
         ax = w / 2; ay = top + (h - top - bottom) / 2;
+        if (!opts.maxZoom) { maxZoom = Math.min(ZOOM_CEIL, Math.max(ZOOM_FLOOR, MAX_SCALE / fit)); tz = clampZ(tz); }
       },
       reset(instant) {
         tz = 1; tu = 0; tv = homeV(); anchor = null;

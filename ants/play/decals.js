@@ -75,6 +75,7 @@
       dark: () => R.DARK || ['#6e1c16', '#163a73', '#7a3f08', '#47236e'],
       makeCanvas: (w, h) => { const c = R.document.createElement('canvas'); c.width = w; c.height = h; return c; },
       hasDom: () => !!(R.document && R.document.createElement),
+      viewW: () => R.innerWidth || 0, viewH: () => R.innerHeight || 0, // ant68: drawGround blits only the visible part of the layer
     }, opts);
     D.env = env;
 
@@ -252,18 +253,24 @@
       return D.layer;
     }
 
+    // ant68: the heat image only changes when the heat does (D.heatDirty); marks repaint far more often than that and used to redo all
+    // n*n pixels (hash2 = Math.sin per pixel, 262k pixels on Huge) each time. Now: skip when clean, grain from a table made once,
+    // and a cool pixel is a single alpha write.
     function paintHeat(L) {
+      if (L.painted && !D.heatDirty && Date.now() - L.paintedAt < 2000) return; // decay alone (slow) is picked up within 2 s
       const n = D.map * CELL, g = L.heatCtx;
       if (!L.img) L.img = g.createImageData(n, n);
-      const d = L.img.data, H = D.heat;
-      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-        const i = y * n + x, h = H[i], j = i * 4;
-        const t = clamp((h - HEAT_SHOW) / 0.55, 0, 1);
-        const a = t * t * (3 - 2 * t) * (0.78 + 0.22 * hash2(x, y)); // a little grain so a path reads as scuffed dirt
+      if (!L.grain) { L.grain = new Float32Array(n * n); for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) L.grain[y * n + x] = 0.78 + 0.22 * hash2(x, y); }
+      const d = L.img.data, H = D.heat, G = L.grain;
+      for (let i = 0, N = n * n; i < N; i++) {
+        const j = i * 4, t = clamp((H[i] - HEAT_SHOW) / 0.55, 0, 1);
+        if (t === 0) { d[j + 3] = 0; continue; }
+        const a = t * t * (3 - 2 * t) * G[i]; // a little grain so a path reads as scuffed dirt
         // compacted ash-brown that darkens as it packs down; reads on grass and on scorched ground alike
         d[j] = 122 - 36 * t; d[j + 1] = 94 - 30 * t; d[j + 2] = 62 - 20 * t; d[j + 3] = Math.round(a * 0.5 * 255);
       }
       g.putImageData(L.img, 0, 0);
+      L.painted = true; L.paintedAt = Date.now();
     }
 
     function blot(g, x, y, rx, ry, rot, fill) { g.fillStyle = fill; g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, TAU); g.fill(); }
@@ -361,7 +368,18 @@
         g.save();
         g.transform(ux.x - o.x, ux.y - o.y, uy.x - o.x, uy.y - o.y, o.x, o.y);
         g.imageSmoothingEnabled = true;
-        g.drawImage(L.canvas, 0, 0, D.map, D.map);
+        // ant68: only the part of the 1536x1536 layer that is on screen (map-unit rect from the inverse transform of the view corners)
+        const W = env.viewW(), H = env.viewH(), a = ux.x - o.x, b = ux.y - o.y, c = uy.x - o.x, d = uy.y - o.y, det = a * d - b * c;
+        if (W > 0 && H > 0 && Math.abs(det) > 1e-9) {
+          let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+          for (const [px, py] of [[-12, -12], [W + 12, -12], [W + 12, H + 12], [-12, H + 12]]) {
+            const qx = px - o.x, qy = py - o.y, u = (qx * d - qy * c) / det, v = (qy * a - qx * b) / det;
+            if (u < u0) u0 = u; if (u > u1) u1 = u; if (v < v0) v0 = v; if (v > v1) v1 = v;
+          }
+          const k = L.side / D.map, m = 2; // canvas px per map unit; 2 px of margin
+          const sx0 = Math.max(0, Math.floor(u0 * k) - m), sx1 = Math.min(L.side, Math.ceil(u1 * k) + m), sy0 = Math.max(0, Math.floor(v0 * k) - m), sy1 = Math.min(L.side, Math.ceil(v1 * k) + m);
+          if (sx1 > sx0 && sy1 > sy0) g.drawImage(L.canvas, sx0, sy0, sx1 - sx0, sy1 - sy0, sx0 / k, sy0 / k, (sx1 - sx0) / k, (sy1 - sy0) / k);
+        } else g.drawImage(L.canvas, 0, 0, D.map, D.map);
         g.restore();
       }
       // dust puffs (live; none in Reduced motion)

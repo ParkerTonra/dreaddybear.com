@@ -76,8 +76,10 @@
   const texelsPerTile = m => Math.max(m >= 96 ? 12 : 16, Math.min(32, Math.round(768 / m))); // ant62: Huge boards (96+) drop to 12 texels a tile: a 144-tile ground is 1728 px, not 2304, and rebuilds in about half the time
 
   // Returns { size, R, data (RGBA), emitters: [[x, y]] } for a map of tile classes (0 open, 1 rock, 2 mud) and nests.
-  function buildTexture(m, seed, cls, nests) {
-    const R = texelsPerTile(m), S = m * R, data = new Uint8ClampedArray(S * S * 4);
+  function buildTexture(m, seed, cls, nests, patch) {
+    // ant66: patch = { data, x0, y0, x1, y1 } (inclusive tile rect) redraws only those tiles into an existing texture (a dug rock).
+    const R = texelsPerTile(m), S = m * R, data = patch ? patch.data : new Uint8ClampedArray(S * S * 4);
+    const J0 = patch ? patch.y0 * R : 0, J1 = patch ? (patch.y1 + 1) * R : S, I0 = patch ? patch.x0 * R : 0, I1 = patch ? (patch.x1 + 1) * R : S;
     const VK = 1.45, VN = Math.ceil(m * VK) + 3; // voronoi cells per tile side
     const vx = new Float32Array(VN * VN), vy = new Float32Array(VN * VN);
     for (let j = 0; j < VN; j++) for (let i = 0; i < VN; i++) { vx[j * VN + i] = i + hash(i, j, seed + 11); vy[j * VN + i] = j + hash(i, j, seed + 17); }
@@ -94,9 +96,10 @@
     const em = new Float32Array(m * m * 3); // per-tile ember weight, x and y sums (emitter positions)
     const P = PAL, s1 = seed * 7 + 1, s2 = seed * 7 + 2, s3 = seed * 7 + 3, s4 = seed * 7 + 4, s5 = seed * 7 + 5;
     let o = 0;
-    for (let j = 0; j < S; j++) {
+    for (let j = J0; j < J1; j++) {
       const wy = (j + 0.5) / R;
-      for (let i = 0; i < S; i++, o += 4) {
+      o = (j * S + I0) * 4;
+      for (let i = I0; i < I1; i++, o += 4) {
         const wx = (i + 0.5) / R;
         // three tones from layered noise, pixel dither on the thresholds
         const n = 0.55 * vnoise(wx * 1.1, wy * 1.1, s1) + 0.30 * vnoise(wx * 3.3, wy * 3.3, s2) + 0.15 * vnoise(wx * 9, wy * 9, s3);
@@ -163,20 +166,42 @@
     }
     const emitters = [];
     for (let t = 0; t < m * m; t++) if (em[t * 3] > 3) emitters.push([em[t * 3 + 1] / em[t * 3], em[t * 3 + 2] / em[t * 3]]);
-    return { size: S, R, data, emitters };
+    return { size: S, R, data, emitters: patch ? null : emitters };
   }
 
+  let prevGround = null; // the last ground texture built: { base key, tile classes, tex }
   function texture(t, state) { // cached per match + terrain + nests
     const nests = (state.players || []).map(p => ({ x: p.nest.x, y: p.nest.y }));
     const key = `${state.seed}|${state.map}|${t ? t.ver : 0}|${nests.map(n => n.x + ',' + n.y).join(';')}`;
     const holder = t || sync.noTerrain || (sync.noTerrain = {});
     if (holder.texKey === key && holder.tex) return holder.tex;
     const cls = t ? t.cls : new Uint8Array(state.map * state.map);
+    // ant66: a rock dug out changes a few tiles; when the last ground (same match, map and nests) differs from this one by a few tiles,
+    // repaint only those tiles plus the 2 around them (a texel looks at tiles within 2) instead of the whole ground (~800 ms on Huge).
+    const base = state.seed + '|' + state.map + '|' + nests.map(n => n.x + ',' + n.y).join(';');
+    if (prevGround && prevGround.base === base && prevGround.tex.canvas) {
+      const old = prevGround.cls, m = state.map;
+      let x0 = m, y0 = m, x1 = -1, y1 = -1, diffs = 0;
+      for (let c = 0; c < m * m; c++) if (old[c] !== cls[c]) {
+        diffs++; const x = c % m, y = (c / m) | 0;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      if (diffs > 0 && diffs <= 12) {
+        x0 = Math.max(0, x0 - 2); y0 = Math.max(0, y0 - 2); x1 = Math.min(m - 1, x1 + 2); y1 = Math.min(m - 1, y1 + 2);
+        const pt = prevGround.tex, R = pt.R;
+        buildTexture(m, state.seed, cls, nests, { data: pt.data, x0, y0, x1, y1 });
+        pt.canvas.getContext('2d').putImageData(new ImageData(pt.data, pt.size, pt.size), 0, 0, x0 * R, y0 * R, (x1 - x0 + 1) * R, (y1 - y0 + 1) * R);
+        prevGround.cls = cls.slice();
+        holder.tex = pt; holder.texKey = key;
+        return pt;
+      }
+    }
     const tex = buildTexture(state.map, state.seed, cls, nests);
     const cv = makeCanvas(tex.size, tex.size);
     if (cv) cv.getContext('2d').putImageData(new ImageData(tex.data, tex.size, tex.size), 0, 0);
-    holder.tex = { canvas: cv, emitters: tex.emitters, size: tex.size, R: tex.R };
+    holder.tex = { canvas: cv, emitters: tex.emitters, size: tex.size, R: tex.R, data: tex.data };
     holder.texKey = key;
+    prevGround = { base, cls: cls.slice(), tex: holder.tex };
     return holder.tex;
   }
 
@@ -400,7 +425,17 @@
       for (const cb of rebuildCbs) { try { cb(L.info); } catch (e) { /* hooks never break the frame */ } }
     }
     const o = toScreen(flip ? m : 0, flip ? m : 0); // world point whose unit-space coords are (0, 0)
-    ctx.drawImage(L.canvas, o.x + B.minU * scale, o.y + B.minV * scale, L.w / L.D * scale, L.h / L.D * scale);
+    // ant68: blit only the part of the layer on screen. The layer is up to 4096x4096 px; handing a canvas that size to drawImage when a few
+    // percent of it is visible costs Firefox milliseconds a frame (it samples, or uploads, far more than it shows).
+    const dx = o.x + B.minU * scale, dy = o.y + B.minV * scale, dw = L.w / L.D * scale, dh = L.h / L.D * scale;
+    const vw = env.viewW, vh = env.viewH, M = 12; // margin: earthquake shake, filter taps
+    if (vw > 0 && vh > 0) {
+      const sx0 = Math.max(0, Math.floor((-M - dx) / dw * L.w) - 2), sx1 = Math.min(L.w, Math.ceil((vw + M - dx) / dw * L.w) + 2);
+      const sy0 = Math.max(0, Math.floor((-M - dy) / dh * L.h) - 2), sy1 = Math.min(L.h, Math.ceil((vh + M - dy) / dh * L.h) + 2);
+      if (sx1 > sx0 && sy1 > sy0) ctx.drawImage(L.canvas, sx0, sy0, sx1 - sx0, sy1 - sy0, dx + sx0 / L.w * dw, dy + sy0 / L.h * dh, (sx1 - sx0) / L.w * dw, (sy1 - sy0) / L.h * dh);
+      return true;
+    }
+    ctx.drawImage(L.canvas, dx, dy, dw, dh);
     return true;
   }
 
@@ -475,11 +510,19 @@
   // is drawn scaled until the density has held ROCK_SETTLE_MS, then rocks re-bake ROCK_REBAKES per frame (rocks() resets it).
   const ROCK_SETTLE_MS = 200, ROCK_REBAKES = 4;
   let rockLook = '', rockQ = 0, rockQAt = 0, rockLeft = ROCK_REBAKES;
-  function rockSprite(toScreen, scale, x, y, n) {
+  // ant68: with ~1000 rocks in view the per-rock flip / density / look-key work (two toScreen calls, a log2, a template string, a clock read)
+  // was a few percent of the frame. render.js drawWorld calls frame() once per frame and clears it after the rock loop.
+  let FR = null;
+  function frame(toScreen, scale) {
+    if (!toScreen) { FR = null; return; }
     const flip = toScreen(1, 0).x - toScreen(0, 0).x < 0, q = spriteQ(scale);
-    const base = `${flip ? 1 : 0}|${todName}|${todVer}`;
+    FR = { flip, q, base: `${flip ? 1 : 0}|${todName}|${todVer}`, now: typeof performance !== 'undefined' ? performance.now() : 0 };
+  }
+  function rockSprite(toScreen, scale, x, y, n) {
+    const flip = FR ? FR.flip : toScreen(1, 0).x - toScreen(0, 0).x < 0, q = FR ? FR.q : spriteQ(scale);
+    const base = FR ? FR.base : `${flip ? 1 : 0}|${todName}|${todVer}`;
     if (base !== rockLook) { rockLook = base; rockSprites.clear(); }
-    const now = typeof performance !== 'undefined' ? performance.now() : 0;
+    const now = FR ? FR.now : typeof performance !== 'undefined' ? performance.now() : 0;
     if (q !== rockQ) { rockQ = q; rockQAt = now; }
     const id = y * 4096 + x;
     let S = rockSprites.get(id);
@@ -577,7 +620,7 @@
   }
 
   root.TerrainDraw = {
-    ground, items, at, rocks, rock, digRings, drawBoard, buildTexture, layerBounds, paintLayer, projector, texelsPerTile, ROCK_BOX, paintRock, applyTint,
+    ground, items, at, rocks, rock, frame, digRings, drawBoard, buildTexture, layerBounds, paintLayer, projector, texelsPerTile, ROCK_BOX, paintRock, applyTint,
     palette: PAL, TOD,
     tod: () => TOD[todName], setTod, overlay, emitters,
     ambient: () => !reduced(), // false in Reduced motion: ambient motion must stand still

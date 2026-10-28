@@ -2712,6 +2712,7 @@ class Game {
     if (this.winner !== null) return;
     this.tickNo++;
     this.time += DT;
+    if (this.terrain) this.terrain.budget = this.terrain.perTick; // ant66: cap new path-field builds per tick
 
     this.shots = [];
     if (this.time >= this.nextEventAt) { this.rollEvent(); this.nextEventAt += EVENT_EVERY; }
@@ -4473,16 +4474,16 @@ module.exports = { handle, PING_KINDS, CHAT_IDS, PING_COOLDOWN, CHAT_COOLDOWN };
 
   // ant17: SUB pixels per tile, each blended from the 4 nearest tile centres, so vision edges are rounded
   // instead of stair-stepped; seen-before and never-seen are further apart so the difference reads.
-  const api = { encode, decode, ALPHA_SEEN: 0.4, ALPHA_DARK: 0.74, SUB: 3, TINT: [14, 9, 18] }; // ant18/ground: dusk violet-black (was cold navy 8,12,22); alphas unchanged so the fog reads the same
+  const api = { encode, decode, ALPHA_SEEN: 0.4, ALPHA_DARK: 0.74, SUB: 1, TINT: [14, 9, 18] }; // ant18/ground: dusk violet-black (was cold navy 8,12,22); alphas unchanged so the fog reads the same
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
 
   const doc = root.document;
   const F = { key: '', seed: null, map: 0, grid: null, explored: null, canvas: null, img: null, rebuilds: 0 };
 
-  // Rebuild the fog canvas from a snapshot's grid (cheap: (SUB*map)^2 pixels, at most once per snapshot).
+  // Rebuild the fog canvas from a snapshot's grid (cheap: map^2 pixels, at most once per snapshot).
   function sync(s) {
     if (!s || !s.fog) return false;
-    const m = s.map, n = m * m, S = api.SUB, w = m * S;
+    const m = s.map, n = m * m, w = m * api.SUB;
     if (F.seed !== s.seed || F.map !== m) {
       F.seed = s.seed; F.map = m; F.key = '';
       F.grid = new Uint8Array(n); F.explored = new Uint8Array(n);
@@ -4493,18 +4494,13 @@ module.exports = { handle, PING_KINDS, CHAT_IDS, PING_COOLDOWN, CHAT_COOLDOWN };
     F.key = s.fog.v;
     decode(s.fog.v, n, F.grid);
     for (let i = 0; i < n; i++) if (F.grid[i]) F.explored[i] = 1;
+    // ant66: one pixel per tile; the canvas's own bilinear smoothing (drawOn) does the soft edges the old 3x3 sub-pixel
+    // blend did, at 1/9 of the pixels (Huge: 16k instead of 147k, ~0.3 ms instead of ~6-11 ms).
     const d = F.img.data, seen = api.ALPHA_SEEN * 255, dark = api.ALPHA_DARK * 255, G = F.grid, E = F.explored;
-    const at = (arr, x, y) => arr[Math.min(m - 1, Math.max(0, y)) * m + Math.min(m - 1, Math.max(0, x))];
-    for (let py = 0; py < w; py++) {
-      const fy = (py + 0.5) / S - 0.5, y0 = Math.floor(fy), ty = fy - y0;
-      for (let px = 0; px < w; px++) {
-        const fx = (px + 0.5) / S - 0.5, x0 = Math.floor(fx), tx = fx - x0;
-        const lerp = arr => (at(arr, x0, y0) * (1 - tx) + at(arr, x0 + 1, y0) * tx) * (1 - ty) + (at(arr, x0, y0 + 1) * (1 - tx) + at(arr, x0 + 1, y0 + 1) * tx) * ty;
-        const vis = lerp(G), exp = lerp(E);
-        const j = (py * w + px) * 4;
-        d[j] = api.TINT[0]; d[j + 1] = api.TINT[1]; d[j + 2] = api.TINT[2];
-        d[j + 3] = Math.round((1 - vis) * (dark - (dark - seen) * exp));
-      }
+    const t0 = api.TINT[0], t1 = api.TINT[1], t2 = api.TINT[2];
+    for (let i = 0, j = 0; i < n; i++, j += 4) {
+      d[j] = t0; d[j + 1] = t1; d[j + 2] = t2;
+      d[j + 3] = G[i] ? 0 : Math.round(E[i] ? seen : dark);
     }
     F.canvas.getContext('2d').putImageData(F.img, 0, 0);
     F.rebuilds++;
@@ -4855,14 +4851,20 @@ function createRooms({ newToken, graceMs, replacedCode, timers, fog = true }) {
   const codecs = new WeakMap();
   const codecOf = ws => { let c = codecs.get(ws); if (!c) codecs.set(ws, c = Codec.createSendCtx()); return c; };
 
+  // ant68: the browser overlay (public/perf.js) sets globalThis.__antPerf = { ev(name, ms) } while it is on, to time the in-tab host. Absent in Node.
   function sendView(ws, view) {
+    const pf = globalThis.__antPerf, t0 = pf ? now() : 0;
     const bytes = Codec.encodeState(view, codecOf(ws));
+    if (pf) pf.ev('encode', now() - t0);
     if (Codec.channelOf(bytes) === 'fast' && ws.sendFast) ws.sendFast(bytes); else ws.send(bytes);
   }
 
   // ant16 fog: each seat gets its team's view of the snapshot (fog.js), spectators the full one.
   function sendState(room) {
-    const g = room.game, v = Fog.views(g, g.snapshot(), room.spectators.size > 0);
+    const pf = globalThis.__antPerf, t0 = pf ? now() : 0;
+    const g = room.game, snap = g.snapshot(), t1 = pf ? now() : 0;
+    const v = Fog.views(g, snap, room.spectators.size > 0);
+    if (pf) { pf.ev('snapshot', t1 - t0); pf.ev('fog', now() - t1); }
     room.players.forEach((ws, i) => { if (ws && ws.readyState === 1) sendView(ws, v.teams[g.players[i].team]); });
     for (const ws of room.spectators) if (ws && ws.readyState === 1) sendView(ws, v.full);
   }
@@ -4914,8 +4916,11 @@ function createRooms({ newToken, graceMs, replacedCode, timers, fog = true }) {
     stopLoop(room);
     for (const ws of [...room.players, ...room.spectators]) if (ws && ws.readyState === 1) Codec.resetSend(codecOf(ws)); // new match: keyframe first
     runLoop(room, () => {
+      const pf = globalThis.__antPerf, t0 = pf ? now() : 0;
       for (const b of brains) b.tick();
+      const t1 = pf ? now() : 0;
       room.game.tick();
+      if (pf) { pf.ev('bots', t1 - t0); pf.ev('sim', now() - t1); }
       if (room.game.winner !== null && room.game.orderLog) writeOrderLog(room);
     }, () => sendState(room));
     broadcast(room, { type: 'start', seed: room.game.seed, mode: room.mode, size: room.size, bots: botList(room) });
@@ -5531,6 +5536,8 @@ const WAYPOINT_LOOKAHEAD = 10;
 const DIG_S = 10; // major-seconds to chew out one rock tile
 const MAX_DIGGERS = 3; // majors that work one tile at once (more wait)
 const DIG_REACH = 0.45; // a digger works once it stands this close to its spot, just outside the rock's edge
+const FIELD_BUILDS_PER_TICK = 2; // ant66: new path fields built per sim tick (1.4 ms each on Huge); further ants go straight for a tick or two instead of hitching the tick
+const BIG_MAP = 96; // tiles a side from which the build cap applies (Huge is 128-144; Large and below stay uncapped)
 const DIG_PUSH = 3; // snapshots that carry the terrain string after a change (a dropped call to snapshot() must not hide a dug tile)
 const MAX_DIG_ROWS = 40; // snapshot `digs` rows
 
@@ -5555,6 +5562,8 @@ class Terrain {
     this.cells = cells; // Uint8Array map*map, row-major y*map+x
     this.fields = new Map(); // goal cell -> Float32Array distances
     this.nearest = new Int32Array(map * map).fill(-1); // rock cell -> nearest open cell (lazy)
+    this.perTick = map >= BIG_MAP ? FIELD_BUILDS_PER_TICK : Infinity; // small boards build in a flash: no cap, no change to their paths
+    this.budget = Infinity; // field builds left this tick (game.js resets it each tick; standalone use is unlimited)
     this.version = 0; // bumped by setCell: snapshots resend the terrain string
   }
 
@@ -5634,6 +5643,8 @@ class Terrain {
   field(goal) {
     let f = this.fields.get(goal);
     if (f) { this.fields.delete(goal); this.fields.set(goal, f); return f; } // refresh: the oldest field is the one evicted
+    if (this.budget <= 0) return null; // over this tick's build budget: the caller steers straight and asks again next tick
+    this.budget--;
     const m = this.map, n = m * m, cells = this.cells;
     f = new Float32Array(n).fill(Infinity);
     f[goal] = 0;
@@ -5733,6 +5744,7 @@ class Terrain {
     // so mirrored ants get mirrored paths.
     const m = this.map, gc = this.cellOf(gx + Math.sign(x - gx) * 1e-4, gy + Math.sign(y - gy) * 1e-4);
     const f = this.field(gc);
+    if (!f) return null;
     // Start tile: for an ant on a tile edge, the one toward the goal (mirror-safe), else the one it's in.
     let c = this.cellOf(x + Math.sign(gx - x) * 1e-4, y + Math.sign(gy - y) * 1e-4);
     if (!Number.isFinite(f[c])) c = this.cellOf(x, y);

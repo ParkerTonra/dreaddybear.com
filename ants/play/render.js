@@ -125,7 +125,7 @@ function paintBoard(map, g) {
 // cached relative to toScreen(0, 0), so a pure pan just blits it somewhere else.
 function drawGround(map) {
   // ant18/ground: terrain-draw.js owns the board layer (texture, cliff edge, shadows, tint), cached per density.
-  if (window.TerrainDraw && TerrainDraw.drawBoard && TerrainDraw.drawBoard(ctx, curr, { toScreen, scale, dpr: pixelRatio(), makeCanvas: Render.makeCanvas, stats: Render.stats })) return;
+  if (window.TerrainDraw && TerrainDraw.drawBoard && TerrainDraw.drawBoard(ctx, curr, { toScreen, scale, dpr: pixelRatio(), makeCanvas: Render.makeCanvas, stats: Render.stats, viewW: innerWidth, viewH: innerHeight })) return;
   const o = toScreen(0, 0), ux = toScreen(1, 0), uy = toScreen(0, 1);
   const ax = ux.x - o.x, ay = ux.y - o.y, bx = uy.x - o.x, by = uy.y - o.y;
   let minX = Math.min(0, ax, bx, ax + bx) * map, maxX = Math.max(0, ax, bx, ax + bx) * map;
@@ -436,7 +436,13 @@ function stampAnt(A, cell, B, x, y, ang, k, dx, dy, sx = 1, sy = 1) {
   const G = RenderCfg.GAIT, rows = RenderCfg.ANTENNA * 2 + 1, col = cell % G, r2 = (cell - col) / G, row = r2 % rows, bin = (r2 - row) / rows;
   const r = k / A.k;
   const P = antPage(A, bin), srcY = (P.yoff || 0) + (A.png && A.png.rowMap ? A.png.rowMap[row] : row) * A.ch;
-  ctx.drawImage(P.canvas, col * A.cw, srcY, A.cw, A.ch, dx - A.ox * r * sx, dy - A.oy * r * sy, A.cw * r * sx, A.ch * r * sy); // ant18: squash/stretch about the ant's centre
+  let ddx = dx - A.ox * r * sx, ddy = dy - A.oy * r * sy, dw = A.cw * r * sx, dh = A.ch * r * sy;
+  if (A.png && A.png.screen) { // ant64: the cell is a tilted-camera view already turned to its bin's screen heading: only the residual turn is applied
+    const S = A.png, ja = Math.round(bin * S.bins / RenderCfg.HEADINGS) % S.bins; // the sheet row actually used (same pick as antPage)
+    ctx.translate(dx, dy); ctx.scale(sx, sy); ctx.rotate(-ja * Math.PI * 2 / S.bins);
+    ddx = -A.ox * r; ddy = -A.oy * r; dw = A.cw * r; dh = A.ch * r;
+  }
+  ctx.drawImage(P.canvas, col * A.cw, srcY, A.cw, A.ch, ddx, ddy, dw, dh); // ant18: squash/stretch about the ant's centre
 }
 
 const POSE = { sx: 1, sy: 1, fwd: 0, side: 0, lift: 0, kb: 0, jx: 0, jy: 0, edge: 0, edgeRim: 0, grow: 1, alpha: 1, emerge: 0, open: false, hx: 0, hy: 0 };
@@ -476,7 +482,7 @@ function drawAnt(a, now, B = ctx.getTransform()) {
   const A = antAtlas(side, type);
   const ang = st ? st.ang : screenAngle(a[5]); // heading: picks the atlas page whose baked light matches
   const cell = antSrc(A, col, wig + (pose ? N : 0), antBin(ang)), SA = Render.src;
-  let dx = 0, dy = 0, sx = 1, sy = 1, y0 = c.y - 3 * scale, alpha = 1, edge = 0, rim = 0;
+  let dx = 0, dy = 0, sx = 1, sy = 1, y0 = c.y - (A.png && A.png.screen ? 0.5 : 3) * scale, alpha = 1, edge = 0, rim = 0;
   if (P) {
     dx = (P.fwd + P.jx) * k; dy = (P.side + P.jy) * k; sx = P.sx * P.grow; sy = P.sy * P.grow; alpha = P.alpha; edge = P.edge; rim = P.edgeRim;
     y0 -= P.lift;
@@ -513,8 +519,8 @@ function drawAntShadows(ants) {
     const cx = c.x + (fly ? 4 : 2.2) * k, cy = c.y + (fly ? 4.5 : 0.8) * k;
     ctx.moveTo(cx + w, cy); ctx.ellipse(cx, cy, w, h, 0, 0, Math.PI * 2);
   }
-  ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,.1)'; ctx.lineWidth = 3.6 * scale; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fill(); // ant64: a tilted 3/4 sprite stands on this, so it is a little darker than the flat-decal era's .2
+  ctx.strokeStyle = 'rgba(0,0,0,.14)'; ctx.lineWidth = 3.6 * scale; ctx.lineJoin = 'round'; ctx.stroke();
   ctx.lineWidth = 1; ctx.lineJoin = 'miter';
 }
 
@@ -540,33 +546,41 @@ function drawCorpses(now, B) {
 // ---------- The world pass ----------
 // Depth-sort everything that stands on the board by screen y. Keys pack (y, kind, index) into one number so a
 // native typed-array sort orders them with no per-frame objects: ties keep nests, food, ants, hazards order.
-const RENDER_SLOT = 8192; // kind * 1024 + index, index < 1024
+const RENDER_SLOT = 8 * 65536; // kind * 65536 + index (ant66: 16 bits of index; it was 10, so a 1025th rock or ant vanished)
 function drawWorld(now) {
   renderSyncSprites();
   const ants = lerpAnts(now);
   const w = typeof view === 'function' ? view(now) : curr; // netbuf.js: nests and hazards drawn at the same moment as the ants
   renderAntMotion(ants, now);
+  if (window.Perf) Perf.mark('prep');
   const B = ctx.getTransform();
   drawAntShadows(ants);
   drawCorpses(now, B);
   if (window.FX && FX.drawPuddles && curr.puddles) FX.drawPuddles(ctx, toScreen, curr.puddles); // ant34 Lingering acid
+  if (window.Perf) Perf.mark('shadows');
   const rocks = window.TerrainDraw ? TerrainDraw.rocks(curr) : [];
+  if (window.TerrainDraw && TerrainDraw.frame) TerrainDraw.frame(toScreen, scale); // ant68: per-frame rock sprite lookups, once
   const S = window.Structures; // ant16: structures.js, depth-sorted as kind 6
   const need = w.players.length + curr.food.length + ants.length + rocks.length + 2 + (S ? S.count() : 0);
   if (Render.keys.length < need) Render.keys = new Float64Array(need * 2);
   const K = Render.keys;
   let n = 0;
-  const put = (y, kind, i) => { K[n++] = (Math.min(2e6, Math.max(0, Math.round(y * 8) + 1e6))) * RENDER_SLOT + kind * 1024 + i; };
-  w.players.forEach((p, i) => put(toScreen(p.nest.x, p.nest.y).y, 0, i));
-  curr.food.forEach((f, i) => put(toScreen(f[1], f[2]).y - 1, 1, i));
-  for (let i = 0; i < ants.length && i < 1024; i++) put(toScreen(ants[i][3], ants[i][4]).y, 2, i);
+  const put = (y, kind, i) => { K[n++] = (Math.min(2e6, Math.max(0, Math.round(y * 8) + 1e6))) * RENDER_SLOT + kind * 65536 + i; };
+  // ant66: rocks, food and nests off screen (plus a margin wider than any sprite) are neither sorted nor drawn: a Huge board has ~1000 rocks and ~400 piles.
+  const cm = 4 * TW * scale, cx0 = -cm, cx1 = innerWidth + cm, cy0 = -cm, cy1 = innerHeight + cm;
+  const onScreen = c => c.x >= cx0 && c.x <= cx1 && c.y >= cy0 && c.y <= cy1;
+  w.players.forEach((p, i) => { const c = toScreen(p.nest.x, p.nest.y); if (onScreen(c)) put(c.y, 0, i); });
+  curr.food.forEach((f, i) => { const c = toScreen(f[1], f[2]); if (onScreen(c)) put(c.y - 1, 1, i); });
+  for (let i = 0; i < ants.length; i++) put(toScreen(ants[i][3], ants[i][4]).y, 2, i);
   if (w.anteater) put(toScreen(w.anteater.x, w.anteater.y).y, 3, 0);
   if (w.beetle) put(toScreen(w.beetle.x, w.beetle.y).y, 4, 0);
-  for (let i = 0; i < rocks.length && i < 1024; i++) put(toScreen(rocks[i][0] + 0.5, rocks[i][1] + 0.5).y, 5, i); // terrain-draw.js
+  for (let i = 0; i < rocks.length; i++) { const c = toScreen(rocks[i][0] + 0.5, rocks[i][1] + 0.5); if (onScreen(c)) put(c.y, 5, i); } // terrain-draw.js
   if (S) S.sortInto(put, 6); // ant16
   const sorted = K.subarray(0, n).sort();
+  const PF = window.Perf && Perf.on ? Perf : null;
+  if (PF) PF.mark('sort');
   for (let j = 0; j < n; j++) {
-    const code = sorted[j] % RENDER_SLOT, kind = code >> 10, i = code & 1023;
+    const code = sorted[j] % RENDER_SLOT, kind = code >> 16, i = code & 65535;
     if (kind === 2) drawAnt(ants[i], now, B);
     else if (kind === 1) drawFood(curr.food[i]);
     else if (kind === 0) drawNest(w.players[i], i, now);
@@ -574,10 +588,14 @@ function drawWorld(now) {
     else if (kind === 4) drawBeetle(w.beetle, now);
     else if (kind === 6) S.draw(i, now); // ant16: structures.js
     else TerrainDraw.rock(ctx, toScreen, scale, rocks[i]);
+    if (PF) PF.mark(kind === 2 ? 'ants' : 'things'); // overlay: time per item kind
   }
+  if (window.TerrainDraw && TerrainDraw.frame) TerrainDraw.frame(null);
   if (window.TerrainDraw && TerrainDraw.digRings) TerrainDraw.digRings(ctx, toScreen, scale, curr); // ant33: dig progress rings (terrain-draw.js)
+  if (PF) PF.mark('things');
   if (window.TimeOfDay) TimeOfDay.overlay(ctx, innerWidth, innerHeight, curr); // ant19/tod: the one time-of-day wash (tod.js)
   if (window.TerrainDraw && TerrainDraw.overlay) TerrainDraw.overlay(ctx, innerWidth, innerHeight); // ant18/ground: night wash (dusk: none)
+  if (PF) PF.mark('wash');
 }
 
 // Rain: all streaks in one path.

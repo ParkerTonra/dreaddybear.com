@@ -13,6 +13,8 @@
 //   { type: 'worker' | 0, side?: 0..3 (omit = every colony), src: 'worker.png', k, cw, ch, ox, oy, gait, rows, bins }
 //   k = device pixels per ant-unit in the sheet, size factor included (the painter's atlas k = q * UNITS[type].size); ox, oy = where the
 //   ant's origin sits inside a cell. render.js stamps at the real zoom by scaling k down or up, so a sheet needs no repaint on zoom.
+//   screenHeading: true (ant64 tilted camera): row i is the ant ALREADY turned to screen angle i * 360 / bins (a 3/4 view, not rotatable like a top-down
+//   one), so the game turns the cell only by the residual heading - i * 360 / bins; without it every cell faces +x and is turned by the whole heading.
 (function (root) {
   'use strict';
   const entries = new Map(); // 'side:type' or 'type' -> { m, img, state: 'loading' | 'ready' | 'failed' }
@@ -60,7 +62,7 @@
       if (e.S) return e.S;
       const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
       if (w !== m.gait * m.cw || h !== m.bins * m.rows * m.ch) return null; // the PNG does not match its manifest
-      return (e.S = { img, k: m.k, cw: m.cw, ch: m.ch, ox: m.ox, oy: m.oy, gait: m.gait, rows: m.rows, bins: m.bins, rowMap: rm });
+      return (e.S = { img, k: m.k, cw: m.cw, ch: m.ch, ox: m.ox, oy: m.oy, gait: m.gait, rows: m.rows, bins: m.bins, rowMap: rm, screen: !!m.screenHeading });
     },
     state(side, type) { const e = entries.get(api.key(side, api.typeIndex(type))) || entries.get(api.key(null, api.typeIndex(type))); return e ? e.state : 'none'; },
     // Fetch a manifest ({ sheets: [entry, ...] }) and register every sheet; src is resolved next to the manifest. Resolves to the number

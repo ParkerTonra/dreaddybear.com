@@ -144,19 +144,29 @@
   }
 
   // ---------- Lobby: size slider + seat picking ----------
-  function renderLobby(m, mySide) {
+  // sizeSink: while set (the solo settings step, solo.js), the slider picks a size locally instead of sending set-size.
+  let sizeSink = null;
+  function showSize(size, locked) {
     const range = $('size-range');
     if (!range) return;
-    const i = Math.max(0, SIZES.indexOf(m.size || 'quick'));
+    const i = Math.max(0, SIZES.indexOf(size || 'quick'));
     range.value = String(i);
-    range.disabled = !(mySide >= 0 && m.host === mySide);
+    range.disabled = !!locked;
     const txt = $('size-text');
-    if (txt) txt.textContent = SIZE_TEXT[SIZES[i]] + (range.disabled ? ' (the host picks)' : '');
+    if (txt) txt.textContent = SIZE_TEXT[SIZES[i]] + (locked ? ' (the host picks)' : '');
   }
+  function renderLobby(m, mySide) {
+    if (sizeSink) return; // the solo step owns the slider
+    showSize(m.size, !(mySide >= 0 && m.host === mySide));
+  }
+  const setSizeSink = fn => { sizeSink = fn || null; };
 
   function wire(send, join) {
     const range = $('size-range');
-    if (range) range.oninput = () => send({ type: 'set-size', size: SIZES[Number(range.value)] || 'quick' });
+    if (range) range.oninput = () => {
+      const size = SIZES[Number(range.value)] || 'quick';
+      if (sizeSink) { sizeSink(size); showSize(size, false); } else send({ type: 'set-size', size });
+    };
     const learn = $('learn-btn');
     if (learn) {
       if (flagGet()) learn.textContent = 'Learn to play (again)';
@@ -169,6 +179,6 @@
     });
   }
 
-  root.Flow = { onMessage, onState, onSend, onEnd, wire, endSummary, paceHints, fmt, STEPS, SIZES, tutorial: tut, advance, stepContext, hasDone };
+  root.Flow = { onMessage, onState, onSend, onEnd, wire, showSize, setSizeSink, endSummary, paceHints, fmt, STEPS, SIZES, tutorial: tut, advance, stepContext, hasDone };
   if (typeof module !== 'undefined') module.exports = root.Flow;
 })(typeof window !== 'undefined' ? window : globalThis);
