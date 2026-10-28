@@ -4876,6 +4876,7 @@ function createRooms({ newToken, graceMs, replacedCode, timers, fog = true }) {
     let due = now() + STEP;
     const wake = () => {
       if (room.timer !== pending) return;
+      if (room.paused) { due = now() + STEP; room.timer = pending = loopSet(wake, STEP); return; } // a hidden solo tab: no ticks, no catch-up on return
       let n = 0;
       while (now() >= due && n < MAX_CATCHUP) { step(); due += STEP; n++; }
       if (now() >= due) due = now() + STEP;
@@ -4906,7 +4907,7 @@ function createRooms({ newToken, graceMs, replacedCode, timers, fog = true }) {
     room.startedAt = Date.now(); // file name only (not in the sim), so same-seed matches do not overwrite each other
     room.game.fog = fog; // ant16 fog: false shows everyone everything
     if (process.env.ORDER_LOG_DIR) room.game.orderLog = []; // B12: record the match; written when it ends (writeOrderLog)
-    room.hold = false;
+    room.hold = false; room.paused = false; room.pausedBy = { hidden: false, manual: false };
     room.ready = room.players.map(() => false);
     const brains = room.players.map((p, i) => p && p.bot && new Bot(room.game, i, p.bot)).filter(Boolean);
     brains.forEach(b => { room.ready[b.colony] = true; }); // bots are always ready
@@ -5081,13 +5082,20 @@ function createRooms({ newToken, graceMs, replacedCode, timers, fog = true }) {
         status(room);
         return;
       }
+      // Solo (public/solo.js): the one human's hidden tab pauses the match, so a throttled timer cannot lag or desync it.
+      // Refused with other humans or watchers in the room: it would freeze their game.
+      if (msg.type === 'pause' && slot >= 0 && room.game && room.game.winner === null && room.players.filter(p => p && !p.bot).length === 1 && !room.spectators.size) {
+        room.pausedBy[msg.why === 'hidden' ? 'hidden' : 'manual'] = !!msg.on; // two reasons: the player's Pause key and a hidden tab; either one holds the sim
+        room.paused = room.pausedBy.hidden || room.pausedBy.manual;
+        return;
+      }
       if (msg.type === 'start' && slot >= 0 && slot === hostSeat(room) && !room.game && room.players.every(Boolean)) {
         startGame(room);
         return;
       }
 
       if (pings.handle(room, slot, msg, ws)) return; // team pings & quick chat relay
-      if (slot >= 0 && room.game) room.game.command(slot, msg);
+      if (slot >= 0 && room.game && !room.paused) room.game.command(slot, msg); // paused (solo only): orders are dropped, not queued
     }
 
     return { message, close: () => { if (room) leave(room, code, ws); } };

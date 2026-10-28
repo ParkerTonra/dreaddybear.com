@@ -1,12 +1,13 @@
 // Host a game from this tab (ant38). On a static copy of the game (no node server.js behind the page) the tab itself
 // runs the game server: host.bundle.js (built from room-core by tools/build-host.js) holds the rooms, OneLobby's
 // kit.hostNostr() hands friends a join code through public Nostr relays, and this tab plays over an in-memory socket
-// (client.js's localHost). Pages served by server.js, and pages joining someone else's game (?dc=CODE), do nothing here.
+// (client.js's localHost). Pages served by server.js only expose the in-tab server for solo play (solo.js); pages joining
+// someone else's game (?dc=CODE) do nothing here.
 // Load order: after client.js (uses $, join, localHost). host.bundle.js and OneLobby load only when needed.
 (function () {
   const params = new URLSearchParams(location.search);
   const nodeServer = !!document.querySelector('meta[name="node-server"]')?.content;
-  if (nodeServer || params.get('dc')) return;
+  if (params.get('dc')) return;
 
   const SITE = 'https://dreaddybear.com/ants/play/';
   const local = /^(localhost|127\.|\[::1\])/.test(location.hostname);
@@ -23,12 +24,16 @@
     .then(() => AntHost.create({ onError: e => console.error('Browser host:', e) }))
     .catch(e => { hostPromise = null; throw e; }));
 
-  localHost = {
+  const inTab = {
     code: '',
     socket: async () => (await ensureHost()).socket(),
     // The page friends open: the game site, or this page's own address when the copy lives somewhere else.
-    shareLink: (room, mode) => `${local ? SITE : location.origin + location.pathname}?dc=${encodeURIComponent(localHost.code)}&room=${encodeURIComponent(room)}&mode=${mode}`,
+    shareLink: (room, mode) => `${local ? SITE : location.origin + location.pathname}?dc=${encodeURIComponent(inTab.code)}&room=${encodeURIComponent(room)}&mode=${mode}`,
   };
+  // Solo (solo.js, "Play vs bots") plays on the in-tab server too, on node-server pages as well: no join code, no OneLobby.
+  window.AntInTab = inTab;
+  if (nodeServer) return; // those pages play on their own server; nothing below applies
+  localHost = inTab;
 
   // No server to play on: the Play buttons would only dial the static site, so offer Host instead (Learn to play still works).
   $('join1').parentElement.classList.add('hidden');
@@ -58,7 +63,7 @@
       mod = await import('./net/onelobby.js');
       lobby = await mod.hostGame();
       host.serve(lobby);
-      localHost.code = lobby.joinCode;
+      inTab.code = lobby.joinCode;
       wireBar();
       showMsg('');
       join(mode); // client.js: connects this tab to its own rooms through localHost and shows the waiting card with the share link

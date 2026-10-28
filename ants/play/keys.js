@@ -18,6 +18,9 @@
 
   const b = (code, mods) => Object.assign({ code, ctrl: false, alt: false, shift: false, meta: false }, mods || {});
   const ALLMODS = { ctrl: ANY, alt: ANY, shift: ANY, meta: ANY };
+  // ant60: WASD pans like the arrows. Plain W/A/S/D are 'soft' defaults (see effective()): a player's own saved binding on the same chord wins.
+  const SOFT = k => Object.assign(k, { soft: true });
+  const SHIFT_ONLY = { shift: true }; // Shift+W/A/S/D: the unit commands that used to own the plain letters
   const SH = { shift: ANY }; // Shift is a free extra (it adds to a selection, cancels a research ...)
 
   // id, group (settings + help section), label, default bindings (first is shown), options.
@@ -26,10 +29,10 @@
   const rows = [];
   const def = (id, group, label, keys, o) => rows.push(Object.assign({ id, group, label, keys: [].concat(keys), ctx: 'match', help: true, rebind: true }, o));
 
-  def('pan.left', 'Camera', 'Pan left', b('ArrowLeft', ALLMODS));
-  def('pan.up', 'Camera', 'Pan up', b('ArrowUp', ALLMODS));
-  def('pan.right', 'Camera', 'Pan right', b('ArrowRight', ALLMODS));
-  def('pan.down', 'Camera', 'Pan down', b('ArrowDown', ALLMODS));
+  def('pan.left', 'Camera', 'Pan left', [b('ArrowLeft', ALLMODS), SOFT(b('KeyA'))]);
+  def('pan.up', 'Camera', 'Pan up', [b('ArrowUp', ALLMODS), SOFT(b('KeyW'))]);
+  def('pan.right', 'Camera', 'Pan right', [b('ArrowRight', ALLMODS), SOFT(b('KeyD'))]);
+  def('pan.down', 'Camera', 'Pan down', [b('ArrowDown', ALLMODS), SOFT(b('KeyS'))]);
   def('zoom.in', 'Camera', 'Zoom in', [b('Equal', SH), b('NumpadAdd', SH)]);
   def('zoom.out', 'Camera', 'Zoom out', [b('Minus', SH), b('NumpadSubtract', SH)]);
   def('view.nest', 'Camera', 'Jump to your nest (again: whole board)', b('Space', SH));
@@ -51,15 +54,15 @@
   def('build.cycle', 'Build', 'Build mode (again: next structure)', b('KeyM', SH));
 
   def('select.fighters', 'Units', 'Select fighters', b('KeyQ', SH));
-  def('select.workers', 'Units', 'Select workers', b('KeyW', SH));
-  def('select.all', 'Units', 'Select all ants', b('KeyA', SH));
+  def('select.workers', 'Units', 'Select workers', b('KeyW', SHIFT_ONLY));
+  def('select.all', 'Units', 'Select all ants', b('KeyA', SHIFT_ONLY));
   // Tab only acts while focus is on the board (input.js checks document.activeElement); Shift+Tab stays browser focus navigation.
   def('select.idle', 'Units', 'Next idle fighter (select and centre)', b('Tab'), { rebind: false });
   def('select.hurt', 'Units', 'Select hurt fighters (under 50% health)', b('Semicolon', SH));
   def('order.attack', 'Units', 'Attack-move (then click)', b('KeyF', SH));
   def('order.patrol', 'Units', 'Patrol (then click)', b('KeyP', SH));
-  def('order.stop', 'Units', 'Stop', b('KeyS', SH));
-  def('order.hold', 'Units', 'Hold position', b('KeyD', SH));
+  def('order.stop', 'Units', 'Stop', b('KeyS', SHIFT_ONLY));
+  def('order.hold', 'Units', 'Hold position', b('KeyD', SHIFT_ONLY));
   def('order.home', 'Units', 'Go home', b('KeyH', SH));
   def('order.auto', 'Units', 'Back to automatic', b('KeyE', SH));
   def('state.fire', 'Units', 'Fire state: cycle', b('KeyF', { ctrl: true, shift: ANY }));
@@ -76,6 +79,8 @@
   def('help.toggle', 'Team', 'This help', b('Slash', { shift: true }), { ctx: 'global' });
   // Escape is one shared action on purpose: every layer (ability, build mode, ping, help, panel) cancels its own state.
   def('cancel', 'Team', 'Cancel / close / deselect', b('Escape', ALLMODS), { ctx: 'global', rebind: false, help: false });
+
+  def('game.pause', 'Team', 'Pause / resume (solo and Learn to play only)', [b('Pause'), b('F10')], { ctx: 'global' });
 
   def('evo.dmg', 'Evolutions', 'Evolve Mandibles (Shift+key cancels)', b('KeyT', SH));
   def('evo.chitin', 'Evolutions', 'Evolve Chitin (Shift+key cancels)', b('KeyY', SH));
@@ -111,7 +116,7 @@
   ];
 
   // ---------- event -> normalised chord ----------
-  const KNOWN = /^(Key[A-Z]|Digit[0-9]|Numpad\w+|Arrow\w+|F([1-9]|1[0-2])|Space|Backquote|Period|Comma|Minus|Equal|Slash|Backslash|Semicolon|Quote|Bracket(Left|Right)|Escape|Tab|Enter|Backspace|Delete|Insert|Home|End|PageUp|PageDown)$/;
+  const KNOWN = /^(Key[A-Z]|Digit[0-9]|Numpad\w+|Arrow\w+|F([1-9]|1[0-2])|Space|Backquote|Period|Comma|Minus|Equal|Slash|Backslash|Semicolon|Quote|Bracket(Left|Right)|Escape|Tab|Enter|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Pause)$/;
   const KEY_TO_CODE = { ' ': 'Space', '`': 'Backquote', '~': 'Backquote', '.': 'Period', ',': 'Comma', '-': 'Minus', _: 'Minus', '=': 'Equal', '+': 'Equal', '/': 'Slash', '?': 'Slash', escape: 'Escape', tab: 'Tab', enter: 'Enter',
     arrowleft: 'ArrowLeft', arrowright: 'ArrowRight', arrowup: 'ArrowUp', arrowdown: 'ArrowDown' };
   function codeFromKey(key) {
@@ -138,11 +143,19 @@
   let overrides = {};
   let capturing = false;
   const listeners = [];
-  const effective = id => (overrides[id] ? [overrides[id]] : (byId[id] ? byId[id].keys : []));
+  // A soft default (plain WASD pan) steps aside when another action has a saved binding that the same press would trigger.
+  const effective = id => {
+    if (overrides[id]) return [overrides[id]];
+    const ks = byId[id] ? byId[id].keys : [];
+    if (!ks.some(k => k.soft)) return ks;
+    return ks.filter(k => !k.soft || !Object.keys(overrides).some(o => o !== id && overlap(k, overrides[o])));
+  };
+  // The plain keys these actions had before WASD became pan. A saved copy of one is just the old default, not a choice.
+  const OLD_PLAIN = { 'select.workers': 'KeyW', 'select.all': 'KeyA', 'order.stop': 'KeyS', 'order.hold': 'KeyD' };
 
   function conflictsFor(id, bd) {
     const me = byId[id];
-    return ACTIONS.filter(a => a.id !== id && (a.ctx === me.ctx || a.ctx === 'global' || me.ctx === 'global') && effective(a.id).some(x => overlap(x, bd)));
+    return ACTIONS.filter(a => a.id !== id && (a.ctx === me.ctx || a.ctx === 'global' || me.ctx === 'global') && effective(a.id).some(x => !x.soft && overlap(x, bd))); // a soft default (plain WASD pan) never blocks a player's own choice
   }
   // check(id, binding) -> { ok: true } | { ok: false, reason }
   function check(id, bd) {
@@ -173,6 +186,7 @@
     for (const id of Object.keys(data)) { // re-validate in order; a stale or hand-edited entry is dropped, never trusted
       const v = data[id], a = byId[id];
       if (!a || !v || typeof v.code !== 'string') continue;
+      if (OLD_PLAIN[id] === v.code && v.ctrl !== true && v.alt !== true && v.meta !== true && v.shift !== true) continue; // ant60: pre-WASD default
       const r = check(id, v);
       if (r.ok) overrides[id] = r.binding;
     }

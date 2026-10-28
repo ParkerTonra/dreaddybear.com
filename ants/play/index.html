@@ -116,7 +116,10 @@
   #sp-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
   #sp-actions button { padding: 4px 7px; font-size: 12px; }
   #sp-actions small { opacity: .65; font-size: 10px; }
-  #help-btn { position: fixed; top: 10px; right: 56px; z-index: 20; padding: 6px 11px; font-size: 16px; line-height: 1; background: var(--panel); border: 1px solid #5a4a36; color: var(--ink); border-radius: 8px; }
+  #pause-btn { position: fixed; top: 10px; right: 100px; z-index: 20; padding: 6px 11px; font-size: 16px; line-height: 1; background: var(--panel); border: 1px solid #5a4a36; color: var(--ink); border-radius: 8px; }
+#pause-btn.hidden, #pause-card.hidden { display: none; }
+#pause-card { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 21; display: flex; gap: 14px; align-items: center; background: var(--panel); border: 1px solid #c9a24a; border-radius: 10px; padding: 8px 16px; font-size: 18px; }
+#help-btn { position: fixed; top: 10px; right: 56px; z-index: 20; padding: 6px 11px; font-size: 16px; line-height: 1; background: var(--panel); border: 1px solid #5a4a36; color: var(--ink); border-radius: 8px; }
   #help { z-index: 15; } /* above the lobby / end overlays (10), which come later in the page */
   #help .card { max-width: 640px; text-align: left; max-height: 90vh; overflow: auto; }
   #help h2 { margin: 0 0 10px; font-size: 22px; }
@@ -187,7 +190,9 @@
 <div id="minimap" class="hidden" data-tip="Minimap: Click or drag to move the camera. Alt+click on the board pings a spot for your team."><canvas id="mm"></canvas></div>
 <div id="sel-panel" class="hidden"></div>
 <div id="flow-hint" class="hidden"></div>
-<button id="help-btn" data-tip="Controls and hotkeys [?]: Every key, order and mouse trick." aria-label="Controls and hotkeys">?</button>
+<button id="pause-btn" class="hidden" data-tip="Pause [Pause / F10]: Stops the match (solo and Learn to play only). Orders are ignored while paused; the camera still moves." aria-label="Pause">&#9208;</button>
+<div id="pause-card" class="hidden"><b>Paused</b><button id="pause-resume">Resume</button></div>
+<button id="help-btn"data-tip="Controls and hotkeys [?]: Every key, order and mouse trick." aria-label="Controls and hotkeys">?</button>
 <div class="overlay hidden" id="help">
   <div class="card">
     <h2>Field Manual <small style="font-size:.55em;opacity:.8;letter-spacing:.06em;text-transform:none">(mostly not stained)</small></h2>
@@ -198,7 +203,7 @@
           <dt>Wheel · pinch</dt><dd>Zoom at the cursor</dd>
           <dt data-keys="zoom.in zoom.out"></dt><dd>Zoom in / out</dd>
           <dt>Middle / right drag</dt><dd>Pan (two fingers on touch)</dd>
-          <dt data-keys="pan.left pan.up pan.right pan.down"></dt><dd>Pan</dd>
+          <dt data-keys="pan.left pan.up pan.right pan.down"></dt><dd>Pan (the W A S D keys pan too; with Shift they are unit commands)</dd>
           <dt data-keys="view.nest"></dt><dd>Jump to your nest (again: whole board)</dd>
           <dt data-keys="view.ping"></dt><dd>Jump to the last team ping or under-attack alert</dd>
           <dt data-keys="view.all"></dt><dd>Whole board</dd>
@@ -277,6 +282,7 @@
         <dl>
           <dt><span data-keys="ping.arm"></span> · <kbd>Alt</kbd>+click</dt><dd>Ping the map</dd>
           <dt data-keys="sound.mute"></dt><dd>Mute sound</dd>
+          <dt data-keys="game.pause"></dt><dd>Pause (solo and Learn to play)</dd>
           <dt data-keys="help.toggle"></dt><dd>This help</dd>
         </dl>
         <!-- research lane: evolutions -->
@@ -330,7 +336,8 @@
         <div class="modes"><button id="host1" data-tip="Host a game: This tab runs the game and gives you a join code. Friends open the link or paste the code. Keep this tab open and visible.">Host 1v1</button><button id="host2">Host 2v2</button></div>
         <p id="host-msg" class="hidden"></p>
       </div>
-      <button id="learn-btn" data-tip="Learn to play: A short solo match against an easy bot, with hints that advance as you do things. Never starts by itself.">Learn to play</button>
+      <div id="solo-form" class="modes"><select id="solo-mode" aria-label="Solo mode"><option value="1v1">1v1</option><option value="2v2">2v2 (bot ally)</option></select><select id="solo-diff" aria-label="Bot difficulty"><option value="easy">Easy bots</option><option value="normal">Normal bots</option><option value="hard">Hard bots</option></select><button id="solo-btn" data-tip="Play vs bots: Starts at once on this tab, every other seat a bot. No join code, nothing sent over the network. Pauses while the tab is hidden.">Play vs bots</button></div>
+      <button id="learn-btn"data-tip="Learn to play: A short solo match against an easy bot, with hints that advance as you do things. Never starts by itself.">Learn to play</button>
     </div>
     <div id="waiting" class="hidden">
       <p id="wait-msg">Waiting for players in room <b id="room-code"></b>…</p>
@@ -350,7 +357,7 @@
     <div id="end-summary" class="hidden"></div>
     <div id="end-stats" class="hidden"></div>
     <div id="end-slots" class="hidden"></div>
-    <div class="end-actions"><button id="leave">Back to lobby</button></div>
+    <div class="end-actions"><button id="leave">Back to lobby</button><button id="solo-again" class="hidden">Play again</button><button id="solo-menu" class="hidden">Main menu</button></div>
   </div>
 </div>
 
@@ -386,6 +393,8 @@
 <script src="structures.js"></script><!-- ant16: build bar, M build mode, structure art -->
 <script src="flow.js"></script><!-- ant18: size slider, seats, end summary, tutorial -->
 <script>Flow.wire(send, () => { document.getElementById('room').value = 'L' + Math.random().toString(36).slice(2, 6).toUpperCase(); join('1v1'); });</script>
+<script src="solo.js"></script><!-- ant59: Play vs bots on the in-tab server (host.js's AntInTab) -->
+<script>Solo.wire({ send, join, useInTab: () => { if (window.AntInTab) localHost = AntInTab; } });</script>
 <script src="keysettings.js"></script>
 <script src="host.js"></script><!-- ant38: Host a game from this tab (static copy only); loads host.bundle.js on demand --><!-- ant18/keymap: Keys section of Settings (load after settings.js once that merges) -->
 </body>

@@ -5,7 +5,7 @@
 // It works in "view space": scale-free isometric coordinates where screen = o + view * scale.
 // The board is a diamond centred on view (0, map*TH/2), whatever the flip.
 //   Controls: wheel / pinch zoom at the cursor · middle-drag, right-drag or two-finger drag pans
-//   Arrow keys pan · + / - zoom · 0 overview · Space your nest (again: overview) · C last ping
+//   Arrow keys or W/A/S/D pan (Shift+W/A/S/D are unit commands) · + / - zoom · 0 overview · Space your nest (again: overview) · C last ping
 (function (root) {
   const TW = 64, TH = 32;
 
@@ -15,7 +15,7 @@
     let z = 1, tz = 1;                      // current / target zoom
     let cu = 0, cv = 0, tu = 0, tv = 0;    // current / target view centre
     let anchor = null;                      // { sx, sy, qu, qv } keeps a point under the cursor while zoom eases
-    let keyU = 0, keyV = 0;                 // held-arrow pan direction
+    let keyU = 0, keyV = 0;                 // held-key (arrows / WASD) pan direction
 
     const homeV = () => map * TH / 2;
     const clampZ = v => Math.max(minZoom, Math.min(maxZoom, v));
@@ -179,7 +179,7 @@
   root.addEventListener('pointerup', endPointer, true);
   root.addEventListener('pointercancel', e => { if (e.isTrusted !== false) endPointer(e); }, true);
 
-  // ---------- Keys: arrows pan, +/- zoom, 0 overview, Space nest, ` last ping (C spawns spitters) ----------
+  // ---------- Keys: arrows and WASD pan, +/- zoom, 0 overview, Space nest, ` last ping (C spawns spitters) ----------
   const held = new Set();
   const PAN = { 'pan.left': [-1, 0], 'pan.right': [1, 0], 'pan.up': [0, -1], 'pan.down': [0, 1] };
   const syncKeys = () => { let u = 0, v = 0; for (const k of held) { u += PAN[k][0]; v += PAN[k][1]; } Camera.setKeyPan(u, v); };

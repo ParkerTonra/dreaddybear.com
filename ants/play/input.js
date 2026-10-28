@@ -1,7 +1,7 @@
 // Ant Arena unit control (RTS-style): select ants, give orders, control groups, touch support.
 // Loaded after client.js and uses its globals (curr, mySide, send, toScreen, screenToWorld, lerpAnts, scale, ctx).
 //   Click ant: select · drag: box select (fighters only, unless the box holds just workers) · Shift: add · double-click: all of that type
-//   Q soldiers · W workers · A all · Ctrl+1-9 save group · 1-9 recall · S stop · E back to auto · H home · Esc cancel/deselect
+//   Q soldiers · Shift+W workers · Shift+A all · Ctrl+1-9 save group · 1-9 recall · Shift+S stop · E back to auto · H home · Esc cancel/deselect
 //   Right-click (or click with a selection): smart order. On an enemy: attack it. On your own ant: follow it.
 //   On the ground: move (Ctrl: soldiers attack-move). On an enemy nest or structure: siege it, ignoring workers.
 //   Click your nest or a structure: select the building (separate from ants). Producers (nest, finished outpost) have their own
@@ -473,6 +473,18 @@ function lineSlots(pts, line, map) {
 }
 
 canvas.addEventListener('contextmenu', e => e.preventDefault());
+// ant60: the browser's context menu never opens over the game, whatever the right button is released on (HUD, formation
+// overlay, tooltip, body), and never during or just after a right-drag. Text fields keep it (copy / paste).
+// Per-element right-click handlers (research cancel, panel rows, spawn buttons) still run: this only calls preventDefault.
+let rightHeld = false, rightUpAt = -1e9;
+const editableTarget = t => !!t && (t.tagName === 'TEXTAREA' || t.isContentEditable === true ||
+  (t.tagName === 'INPUT' && !/^(button|checkbox|radio|range|submit|reset|color|file|image)$/i.test(t.type || 'text')));
+addEventListener('pointerdown', e => { if (e.button === 2 && !editableTarget(e.target)) rightHeld = true; }, true);
+addEventListener('pointerup', e => { if (e.button === 2) { rightHeld = false; rightUpAt = Date.now(); } }, true);
+addEventListener('pointercancel', () => { rightHeld = false; }, true);
+addEventListener('contextmenu', e => {
+  if (!editableTarget(e.target) || rightHeld || Date.now() - rightUpAt < 600) e.preventDefault();
+}, true);
 canvas.addEventListener('selectstart', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   if (!e.isPrimary || e.altKey || (e.button !== 0 && e.button !== 2) || !canCommand()) return;
@@ -533,8 +545,8 @@ addEventListener('keydown', e => {
   if (Keys.is(e, 'state.move')) { if (sel.size) { e.preventDefault(); cycleState('move'); } return; }
   const all = () => curr.ants.filter(a => a[1] === mySide);
   if (Keys.is(e, 'select.fighters')) setSel(all().filter(a => a[2]).map(a => a[0]), e.shiftKey);
-  else if (Keys.is(e, 'select.workers')) setSel(all().filter(a => !a[2]).map(a => a[0]), e.shiftKey);
-  else if (Keys.is(e, 'select.all')) setSel(all().map(a => a[0]), e.shiftKey);
+  else if (Keys.is(e, 'select.workers')) setSel(all().filter(a => !a[2]).map(a => a[0]), false); // ant60: the chord is Shift+W now, so Shift can no longer mean add
+  else if (Keys.is(e, 'select.all')) setSel(all().map(a => a[0]), false); // ant60: Shift+A, replaces the selection
   else if (Keys.is(e, 'select.idle')) { // Tab, only while nothing else (a focused button, say) wants it; Shift+Tab never matches
     const ae = document.activeElement;
     if (ae && ae !== document.body && ae !== canvas) return;

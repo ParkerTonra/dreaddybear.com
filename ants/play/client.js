@@ -191,6 +191,7 @@ function setUrl() {
 function onMessage(m) {
   if (m.bots) bots = m.bots;
   if (window.Flow) Flow.onMessage(m, mySide); // ant18 flow.js: size slider, tutorial bot fill
+  if (window.Solo) Solo.onMessage(m, mySide); // ant59 solo.js: bot fill on the first lobby card, pause while hidden
   if (window.Pings && Pings.onMessage(m)) return; // team pings & quick chat (pings.js)
   if (m.type === 'joined') {
     mySide = m.side; myTeam = m.side < 0 ? -1 : m.side % 2; roomCode = m.room; roomMode = m.mode;
@@ -277,6 +278,7 @@ function showEnd(team, reason) {
   $('end-sub').textContent = `${winners} ${reason || 'destroyed every enemy nest'}.`; // reason: ant16 match clock
   hudEndStats();
   if (window.Flow) Flow.onEnd(curr, mySide, myTeam); // ant18: stat summary
+  if (window.Solo) Solo.onEnd(); // ant59: Play again / Main menu
 }
 $('fill-bots').onclick = () => send({ type: 'fill-bots', difficulty: $('bot-diff').value });
 $('start-match').onclick = () => send({ type: 'start' });

@@ -42,12 +42,12 @@
 
   // ctx: { sel: Set of selected ant type ids, soldiers, sent: Set of things the player did (spawn:worker, siege) }
   const STEPS = [
-    { id: 'select', text: 'Select your workers: press <kbd>W</kbd>, or drag a box around them.', done: c => c.sel.has(0) },
+    { id: 'select', text: 'Select your workers: press <kbd>Shift</kbd>+<kbd>W</kbd>, or drag a box around them.', done: c => c.sel.has(0) },
     { id: 'gather', text: 'Workers gather food on their own. Hatch more with <kbd>Z</kbd> (10 food).', done: c => c.sent.has('spawn:worker') },
     { id: 'soldiers', text: 'Soldiers fight. Press <kbd>X</kbd> (25 food) until you have 3.', done: c => c.soldiers >= 3 },
     { id: 'army', text: 'Select your army: press <kbd>Q</kbd>.', done: c => c.sel.has(1) },
     { id: 'siege', text: 'Right-click the enemy nest (far corner; <kbd>0</kbd> shows the whole board) to siege it. Majors (<kbd>V</kbd>, costs a 🔵 pellet) hit nests 4x harder.', done: c => c.sent.has('siege') },
-    { id: 'keys', text: 'Click your nest, then right-click the ground to set where its soldiers gather. Keys: <kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd> spawn ·<kbd>Q</kbd><kbd>W</kbd><kbd>A</kbd> select · <kbd>T</kbd>-<kbd>O</kbd> evolve · <kbd>F</kbd> attack-move · <kbd>S</kbd> stop · <kbd>Space</kbd> home · <kbd>?</kbd> everything.', done: () => false },
+    { id: 'keys', text: 'Click your nest, then right-click the ground to set where its soldiers gather. Keys: <kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd> spawn ·<kbd>Q</kbd> <kbd>Shift</kbd>+<kbd>W</kbd> <kbd>Shift</kbd>+<kbd>A</kbd> select · <kbd>T</kbd>-<kbd>O</kbd> evolve · <kbd>F</kbd> attack-move · <kbd>Shift</kbd>+<kbd>S</kbd> stop · <kbd>Space</kbd> home · <kbd>?</kbd> everything.', done: () => false },
   ];
 
   const tut = { pending: false, active: false, i: 0, sent: new Set() };
