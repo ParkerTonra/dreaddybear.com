@@ -72,6 +72,11 @@
 
   function nest(g, c, s, p, side, cracks) {
     const col = COL()[side], dark = DK()[side], gl = GLOW[side];
+    if (p.alive && root.BuildingArt && root.BuildingArt.paint(g, c, s, 'nest', col)) { // Quaternius anthill (building-art.js): shadow, mound, hole and flag are in the sprite
+      if (cracks) cracks(c, s, 1 - p.nest.hp / p.nest.max, side, g);
+      tint(g);
+      return;
+    }
     // scorched ring and long shadow
     g.fillStyle = 'rgba(14,8,6,0.45)'; ell(g, c.x, c.y + 1 * s, 56 * s, 28 * s); g.fill();
     shadow(g, c, s, 46, 22, 40);
@@ -137,8 +142,17 @@
     tint(g);
   }
 
+  // Where the entrance hole is, in game px from the nest centre: the sheet's own (the anthill sprite) or the painter's.
+  function nestHole() { const m = root.BuildingArt && root.BuildingArt.meta('nest'); return m && m.hole ? m.hole : HOLE; }
   function nestGlow(ctx, c, scale, side, p, now) {
     if (!p.alive) return;
+    if (root.BuildingArt && root.BuildingArt.has('nest')) { // sprite nest: no painted vents, only the hole glows
+      const k = glowK(), amb = TD() ? TD().ambient() : !reduced(), h = nestHole();
+      const ph = amb ? 0.5 + 0.5 * pulse(now / 520 + side * 1.7) : 0.55;
+      stampGlow(ctx, GLOW[side], c.x + h[0] * scale, c.y + h[1] * scale, 15 * scale, (0.5 + 0.12 * (k - 1)) * 0.5 * k * (0.7 + 0.5 * ph));
+      stampGlow(ctx, '#ffd9a0', c.x + h[0] * scale, c.y + (h[1] + 1) * scale, 4.5 * scale, 0.3 * k * ph);
+      return;
+    }
     const k = glowK(), amb = TD() ? TD().ambient() : !reduced();
     const base = 0.5 + 0.12 * (k - 1);
     const ph = amb ? 0.5 + 0.5 * pulse(now / 520 + side * 1.7) : 0.55;
@@ -232,8 +246,8 @@
     g.beginPath(); g.ellipse(c.x, c.y - (hgt + 0.4) * s, (rx - 1) * s, (ry - 1) * s, 0, Math.PI * 1.05, Math.PI * 1.55); g.stroke();
   }
 
-  // Quaternius sprites (building-art.js): kind -> cell; an unfinished site shows the shared construction site. Outposts stay code-drawn.
-  const SHEET_CELL = { 0: 'depot', 1: 'mound', 3: 'garden' };
+  // Quaternius sprites (building-art.js): kind -> cell; an unfinished site shows the shared construction site.
+  const SHEET_CELL = { 0: 'depot', 1: 'mound', 2: 'outpost', 3: 'garden' };
   const hasSheet = k => !!(root.BuildingArt && SHEET_CELL[k] && root.BuildingArt.has(SHEET_CELL[k]));
   function paintStructure(g, c, s, k, side, done) {
     if (hasSheet(k) && root.BuildingArt.paint(g, c, s, done ? SHEET_CELL[k] : 'site', COL()[side])) return;
@@ -292,6 +306,11 @@
       stampGlow(ctx, '#eaffa0', c.x, gy, 5 * z, 0.5 * v);
     } else if (k === 2 && done) {
       const v = amb ? 0.5 + 0.5 * pulse(now / 400 + id) : 0.55;
+      if (sheet) { // the sprite's tunnel hole, low on the front of the mound
+        stampGlow(ctx, GLOW[side], c.x, c.y - 3 * z, 9 * z, (0.25 + 0.3 * v) * kk);
+        stampGlow(ctx, '#ffd9a0', c.x, c.y - 3 * z, 3 * z, 0.12 * kk);
+        return;
+      }
       for (const vx of [-12, 11]) stampGlow(ctx, GLOW[side], c.x + vx * z, c.y - 6 * z, 6 * z, (0.4 + 0.4 * v) * kk);
       stampGlow(ctx, '#ffd9a0', c.x, c.y - 12 * z, 7 * z, 0.3 * kk);
     } else if (k === 0 && done && !sheet) {
@@ -306,5 +325,5 @@
     structGlow(ctx, c, z, k, side, now, id, done);
   }
 
-  root.WorldArt = { nest, nestGlow, food, pellets, drawStructure, glow, stampGlow, GLOW, LIGHT, hasSheet, NEST_BOX: { L: 62, R: 74, T: 62, B: 40 }, shadow };
+  root.WorldArt = { nest, nestGlow, nestHole, food, pellets, drawStructure, glow, stampGlow, GLOW, LIGHT, hasSheet, NEST_BOX: { L: 62, R: 74, T: 62, B: 40 }, shadow };
 })(typeof window !== 'undefined' ? window : globalThis);

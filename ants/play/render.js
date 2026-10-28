@@ -202,7 +202,7 @@ function paintNest(g, c, s, p, side) {
 
 function nestSprite(p, side) {
   const q = Render.q, dmg = 1 - p.nest.hp / p.nest.max;
-  const key = p.alive ? (dmg < 0.1 ? 'ok' : `${Math.min(7, Math.ceil(dmg * 8))}:${Math.round(dmg * 3)}`) : 'dead';
+  const key = (window.BuildingArt ? BuildingArt.ver + '|' : '') + (p.alive ? (dmg < 0.1 ? 'ok' : `${Math.min(7, Math.ceil(dmg * 8))}:${Math.round(dmg * 3)}`) : 'dead');
   let S = Render.nests.get(side);
   if (S && S.key === key && (S.q === q || Render.rebakes <= 0)) return S;
   Render.rebakes--;
@@ -226,8 +226,9 @@ function drawNest(p, side, now = performance.now()) {
   ctx.drawImage(S.canvas, c.x - S.ox * s, c.y - S.oy * s, S.w * s, S.h * s);
   if (window.WorldArt) WorldArt.nestGlow(ctx, c, s, side, p, now); // ant18/ground: live vent glow
   if (!p.alive) return;
+  const hole = window.WorldArt ? WorldArt.nestHole() : [0, -16];
   const glow = fx && fx.nestGlow && !(window.Settings && Settings.reduced()) ? fx.nestGlow(side, now) : 0; // ant18 feel-anim: the hole brightens as an ant crawls out
-  if (glow) { ctx.fillStyle = `rgba(255,214,120,${(glow * .4).toFixed(3)})`; ctx.beginPath(); ctx.ellipse(c.x, c.y - 16 * s, 9 * s, 5 * s, 0, 0, Math.PI * 2); ctx.fill(); }
+  if (glow) { ctx.fillStyle = `rgba(255,214,120,${(glow * .4).toFixed(3)})`; ctx.beginPath(); ctx.ellipse(c.x + hole[0] * s, c.y + hole[1] * s, 9 * s, 5 * s, 0, 0, Math.PI * 2); ctx.fill(); }
   if (shake) { ctx.fillStyle = `rgba(255,240,200,${(shake * .35).toFixed(3)})`; ctx.beginPath(); ctx.ellipse(c.x, c.y - 10 * s, 34 * s, 22 * s, 0, Math.PI, 0); ctx.fill(); }
   // hp bar
   const w = 70 * s, frac = p.nest.hp / p.nest.max;

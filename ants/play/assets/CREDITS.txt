@@ -20,3 +20,5 @@ dusk_colony.ogg, swarm.ogg: original placeholder tracks composed with Fontbard (
 3D models (rendered to the building sprite sheet, public/assets/buildings/; ants/tools/blender/render-building.py)
   Quaternius "Nature Crops Pack" (Jan 2020: Mushroom_1..4, Wheat_Crop) and "Ultimate Nature Pack" (Jun 2019: TreeStump, WoodLog, Rock_1, Rock_Moss_1..7),
   https://quaternius.com, CC0 (no credit required; given anyway). Rendered with Blender 4.2 LTS; materials recoloured, composed into small dioramas.
+  ant63 nest and outpost: the same Ultimate Nature Pack (Rock_2, Rock_4, Rock_6, Rock_Moss_2, TreeStump_Moss, Grass, Grass_2, Grass_Short); the earthen
+  anthill, entrance hole, crumbs and flag are plain Blender primitives. Both are cells of the same buildings.png (the nest is the big cell on the right).

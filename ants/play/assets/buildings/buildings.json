@@ -5,15 +5,32 @@
  "ch": 72,
  "ox": 40,
  "oy": 46,
+ "w": 536,
+ "h": 204,
  "cells": {
   "garden": 0,
   "depot": 1,
   "mound": 2,
-  "site": 3
+  "site": 3,
+  "outpost": 4
  },
  "rows": {
   "base": 0,
   "mask": 1
+ },
+ "extra": {
+  "nest": {
+   "x": 400,
+   "y": 0,
+   "w": 136,
+   "h": 102,
+   "ox": 62,
+   "oy": 62,
+   "hole": [
+    1,
+    -8
+   ]
+  }
  },
  "unit": 22.0
 }
