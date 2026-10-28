@@ -76,6 +76,8 @@
     KINDS.forEach((K, i) => {
       const b = $(`st-${K.id}`);
       if (!b) return;
+      const ico = b.dataset && !b.dataset.art && window.BuildingArt && BuildingArt.icon(K.id, 26); // swap the emoji for the sprite once the sheet is ready
+      if (ico && b.firstChild.nodeType === 3) { const i2 = document.createElement('i'); i2.style.cssText = ico; b.replaceChild(i2, b.firstChild); b.insertBefore(document.createTextNode(' '), b.lastChild); b.dataset.art = 1; }
       const n = mine.filter(s => s[2] === i).length;
       b.disabled = !me.alive || me.food < K.cost || n >= K.max;
       b.style.outline = mode === i ? '2px solid #fff' : '';

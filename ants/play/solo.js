@@ -1,13 +1,14 @@
 // Solo (ant59): "Play vs bots" starts a match at once with every other seat a bot. It plays on the in-tab game server
 // (host.js's AntInTab, the same one Learn to play can use), so there is no Nostr hosting, no join code, no host banner
-// and no share link: nothing leaves the tab. The choice (1v1 or 2v2, bot difficulty) is remembered per viewer.
+// and no share link: nothing leaves the tab. The choice (1v1 or 2v2, bot difficulty, map size) is remembered per viewer.
 // While the tab is hidden the match is paused (room-core 'pause'), so a throttled timer never lags it.
 // Load order: after client.js and flow.js. Pure helpers are exported for tests/solo.test.js.
 (function (root) {
   const KEY = 'ant-solo';
-  const MODES = ['1v1', '2v2'], DIFFS = ['easy', 'normal', 'hard'];
-  const DEFAULTS = { mode: '1v1', diff: 'normal' };
-  const clean = o => ({ mode: MODES.includes(o && o.mode) ? o.mode : DEFAULTS.mode, diff: DIFFS.includes(o && o.diff) ? o.diff : DEFAULTS.diff });
+  const MODES = ['1v1', '2v2'], DIFFS = ['easy', 'normal', 'hard'], SIZES = ['quick', 'standard', 'large', 'huge'];
+  const DEFAULTS = { mode: '1v1', diff: 'normal', size: 'quick' };
+  const clean = o => ({ mode: MODES.includes(o && o.mode) ? o.mode : DEFAULTS.mode, diff: DIFFS.includes(o && o.diff) ? o.diff : DEFAULTS.diff,
+    size: SIZES.includes(o && o.size) ? o.size : DEFAULTS.size });
 
   function load(storage) {
     try { return clean(JSON.parse(storage.getItem(KEY))); } catch (e) { return { ...DEFAULTS }; } // private mode, or nothing stored yet
@@ -39,6 +40,7 @@
     if (!solo.active) return;
     if (m.type === 'lobby' && solo.pending && mySide >= 0 && m.host === mySide) {
       solo.pending = false;
+      if ((m.size || 'quick') !== solo.size) deps.send({ type: 'set-size', size: solo.size }); // the room starts at the default size; set it before the bot fill starts the match
       deps.send({ type: 'fill-bots', difficulty: solo.diff });
     }
     if (m.type === 'start') syncPause();
@@ -87,8 +89,8 @@
     deps = d;
     const $ = id => root.document.getElementById(id);
     const c = load(root.localStorage);
-    $('solo-mode').value = c.mode; $('solo-diff').value = c.diff;
-    $('solo-btn').onclick = () => start({ mode: $('solo-mode').value, diff: $('solo-diff').value });
+    $('solo-mode').value = c.mode; $('solo-diff').value = c.diff; $('solo-size').value = c.size;
+    $('solo-btn').onclick = () => start({ mode: $('solo-mode').value, diff: $('solo-diff').value, size: $('solo-size').value });
     $('solo-again').onclick = again;
     $('solo-menu').onclick = () => { root.location.href = root.location.pathname; }; // a fresh page: in-tab server, bots and sockets all go
     $('pause-btn').onclick = togglePause;
@@ -99,6 +101,6 @@
     root.document.addEventListener('visibilitychange', () => { if (solo.active) deps.send({ type: 'pause', on: root.document.hidden, why: 'hidden' }); });
   }
 
-  root.Solo = { wire, onMessage, onEnd, start, again, togglePause, load, save, clean, state: solo, MODES, DIFFS, DEFAULTS, KEY };
+  root.Solo = { wire, onMessage, onEnd, start, again, togglePause, load, save, clean, state: solo, MODES, DIFFS, SIZES, DEFAULTS, KEY };
   if (typeof module !== 'undefined') module.exports = root.Solo;
 })(typeof window !== 'undefined' ? window : globalThis);

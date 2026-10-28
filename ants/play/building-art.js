@@ -7,7 +7,8 @@
 //                                            multiplied with `color`; returns false (nothing drawn) until the sheet is ready.
 (function (root) {
   'use strict';
-  let m = null, img = null, state = 'none';
+  let m = null, img = null, state = 'none', url = '';
+  const ICON = { x: 10, y: 6, w: 60, h: 56 }; // the part of a cell (game px) a build button shows: the building, not its empty margin
   const api = {
     ver: 0, // bumps when the sheet becomes ready or is cleared: world-art.js drops its cached sprites
     imageFactory: () => new root.Image(),
@@ -30,10 +31,17 @@
       };
       mine.onerror = () => { if (img === mine) { state = 'failed'; if (root.console) console.warn('building-art: could not load ' + man.src + '; the painter stays in charge'); } };
       mine.crossOrigin = 'anonymous';
-      mine.src = base + man.src;
+      mine.src = url = base + man.src;
       return true;
     },
-    clear() { const was = state === 'ready'; m = null; img = null; state = 'none'; if (was) api.ver++; },
+    clear() { const was = state === 'ready'; m = null; img = null; url = ''; state = 'none'; if (was) api.ver++; },
+    // CSS for a build-button icon `w` px wide cropped from cell `name` (row 0), or null until the sheet is ready.
+    icon(name, w) {
+      if (!api.has(name)) return null;
+      const f = w / ICON.w, n = Object.keys(m.cells).length, r = v => Math.round(v * 100) / 100;
+      return `display:inline-block;vertical-align:middle;width:${w}px;height:${Math.round(ICON.h * f)}px;` +
+        `background:url("${url}") ${r(-(m.cells[name] * m.cw + ICON.x) * f)}px ${r(-ICON.y * f)}px/${r(n * m.cw * f)}px auto no-repeat`;
+    },
     async load(url, fetchFn = root.fetch && root.fetch.bind(root)) {
       try {
         const res = await fetchFn(url, { cache: 'no-cache' });

@@ -159,7 +159,7 @@
   #flow-hint button { padding: 3px 8px; font-size: 12px; background: #4a3a28; color: var(--ink); }
   /* ===== end ant18/flow ===== */
 </style>
-<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="theme.css?v=6e2349f968">
 </head>
 <body>
 <canvas id="c"></canvas>
@@ -337,7 +337,7 @@
         <div class="modes"><button id="host1" data-tip="Host a game: This tab runs the game and gives you a join code. Friends open the link or paste the code. Keep this tab open and visible.">Host 1v1</button><button id="host2">Host 2v2</button></div>
         <p id="host-msg" class="hidden"></p>
       </div>
-      <div id="solo-form" class="modes"><select id="solo-mode" aria-label="Solo mode"><option value="1v1">1v1</option><option value="2v2">2v2 (bot ally)</option></select><select id="solo-diff" aria-label="Bot difficulty"><option value="easy">Easy bots</option><option value="normal">Normal bots</option><option value="hard">Hard bots</option></select><button id="solo-btn" data-tip="Play vs bots: Starts at once on this tab, every other seat a bot. No join code, nothing sent over the network. Pauses while the tab is hidden.">Play vs bots</button></div>
+      <div id="solo-form" class="modes"><select id="solo-mode" aria-label="Solo mode"><option value="1v1">1v1</option><option value="2v2">2v2 (bot ally)</option></select><select id="solo-diff" aria-label="Bot difficulty"><option value="easy">Easy bots</option><option value="normal">Normal bots</option><option value="hard">Hard bots</option></select><select id="solo-size" aria-label="Map size"><option value="quick">Quick map</option><option value="standard">Standard map</option><option value="large">Large map</option><option value="huge">Huge map</option></select><button id="solo-btn" data-tip="Play vs bots: Starts at once on this tab, every other seat a bot. No join code, nothing sent over the network. Pauses while the tab is hidden.">Play vs bots</button></div>
       <button id="learn-btn"data-tip="Learn to play: A short solo match against an easy bot, with hints that advance as you do things. Never starts by itself.">Learn to play</button>
     </div>
     <div id="waiting" class="hidden">
@@ -362,42 +362,42 @@
   </div>
 </div>
 
-<script src="settings.js"></script><!-- ant18: Reduced motion; first so motionSin exists for every pulse -->
-<script src="tip.js"></script>
-<script src="keys.js"></script><!-- ant18/keymap: the one key table (after tip.js, before every script that binds a key) -->
-<script src="sound.js"></script>
-<script src="fx.js"></script>
-<script src="netbuf.js"></script>
-<script src="camera.js"></script>
-<script src="unit-art.js"></script>
-<script src="atlas-loader.js"></script><!-- ant26: PNG atlas seam for direction B; opt-in with ?atlas=<manifest url>, painter otherwise -->
-<script src="tod.js"></script><!-- ant19/tod: seed-picked time of day, one live wash -->
-<script src="terrain-draw.js"></script>
-<script src="building-art.js"></script><!-- ant61: Quaternius building sprites; painter when missing -->
-<script src="world-art.js"></script><!-- ant18/ground: nest, food, structure art -->
-<script src="creature-art.js"></script><!-- ant19/creatures: beetle, anteater, spider sprites -->
-<script src="decals.js"></script><!-- ant18/decals: wear, marks, dust, spores, critters -->
-<script src="fog.js"></script>
-<script src="codec.js"></script><!-- ant54: state <-> bytes; before client.js -->
-<script src="client.js"></script>
-<script src="render.js"></script>
-<script src="objectives.js"></script>
-<script src="pings.js"></script>
-<script src="hud.js"></script>
-<script src="economy.js"></script>
-<script src="research.js"></script><!-- research lane: evolution bar, T Y U I O, chip icons -->
-<script src="ui-world.js"></script><!-- ant19/ui-world: rings, bars, pennants, pings, minimap pieces -->
-<script src="input.js"></script>
-<script src="minimap.js"></script>
-<script src="alerts.js"></script><!-- control B5: under-attack alert (after minimap: shares its ping list) -->
-<script src="panel.js"></script>
-<script src="abilities.js"></script><!-- ant16: active abilities -->
-<script src="structures.js"></script><!-- ant16: build bar, M build mode, structure art -->
-<script src="flow.js"></script><!-- ant18: size slider, seats, end summary, tutorial -->
+<script src="settings.js?v=f052345cc0"></script><!-- ant18: Reduced motion; first so motionSin exists for every pulse -->
+<script src="tip.js?v=31f4672be1"></script>
+<script src="keys.js?v=7f7f84924d"></script><!-- ant18/keymap: the one key table (after tip.js, before every script that binds a key) -->
+<script src="sound.js?v=112c16faa3"></script>
+<script src="fx.js?v=c403782159"></script>
+<script src="netbuf.js?v=6dfc07cadd"></script>
+<script src="camera.js?v=19f4c3f55a"></script>
+<script src="unit-art.js?v=ab808c00fd"></script>
+<script src="atlas-loader.js?v=c6365d7f03"></script><!-- ant26: PNG atlas seam for direction B; opt-in with ?atlas=<manifest url>, painter otherwise -->
+<script src="tod.js?v=b9819727b2"></script><!-- ant19/tod: seed-picked time of day, one live wash -->
+<script src="terrain-draw.js?v=1266a64a5a"></script>
+<script src="building-art.js?v=28aad03053"></script><!-- ant61: Quaternius building sprites; painter when missing -->
+<script src="world-art.js?v=9a3ed83d86"></script><!-- ant18/ground: nest, food, structure art -->
+<script src="creature-art.js?v=313d9d839a"></script><!-- ant19/creatures: beetle, anteater, spider sprites -->
+<script src="decals.js?v=e1c5d64674"></script><!-- ant18/decals: wear, marks, dust, spores, critters -->
+<script src="fog.js?v=a0b4a67a81"></script>
+<script src="codec.js?v=589267428a"></script><!-- ant54: state <-> bytes; before client.js -->
+<script src="client.js?v=7ab0ce7fc0"></script>
+<script src="render.js?v=d557ae4a38"></script>
+<script src="objectives.js?v=fdec1c1706"></script>
+<script src="pings.js?v=9c365585bd"></script>
+<script src="hud.js?v=74af6353ab"></script>
+<script src="economy.js?v=e312577417"></script>
+<script src="research.js?v=237a190105"></script><!-- research lane: evolution bar, T Y U I O, chip icons -->
+<script src="ui-world.js?v=199e6a2288"></script><!-- ant19/ui-world: rings, bars, pennants, pings, minimap pieces -->
+<script src="input.js?v=0e3e6623ee"></script>
+<script src="minimap.js?v=6d791f6a3e"></script>
+<script src="alerts.js?v=0b5bbafcee"></script><!-- control B5: under-attack alert (after minimap: shares its ping list) -->
+<script src="panel.js?v=cda3618582"></script>
+<script src="abilities.js?v=5700e0c1f4"></script><!-- ant16: active abilities -->
+<script src="structures.js?v=e617e816de"></script><!-- ant16: build bar, M build mode, structure art -->
+<script src="flow.js?v=acb5e7a02c"></script><!-- ant18: size slider, seats, end summary, tutorial -->
 <script>Flow.wire(send, () => { document.getElementById('room').value = 'L' + Math.random().toString(36).slice(2, 6).toUpperCase(); join('1v1'); });</script>
-<script src="solo.js"></script><!-- ant59: Play vs bots on the in-tab server (host.js's AntInTab) -->
+<script src="solo.js?v=e3113f0992"></script><!-- ant59: Play vs bots on the in-tab server (host.js's AntInTab) -->
 <script>Solo.wire({ send, join, useInTab: () => { if (window.AntInTab) localHost = AntInTab; } });</script>
-<script src="keysettings.js"></script>
-<script src="host.js"></script><!-- ant38: Host a game from this tab (static copy only); loads host.bundle.js on demand --><!-- ant18/keymap: Keys section of Settings (load after settings.js once that merges) -->
+<script src="keysettings.js?v=eb5ff4d73f"></script>
+<script src="host.js?v=2e31284e09"></script><!-- ant38: Host a game from this tab (static copy only); loads host.bundle.js on demand --><!-- ant18/keymap: Keys section of Settings (load after settings.js once that merges) -->
 </body>
 </html>

@@ -4,6 +4,7 @@
 // served as text/plain.
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -52,5 +53,17 @@ for (const f of ["client.js", "host.js"]) rewrite(path.join(out, f), "import('./
 // The onelobby and share-base metas stay empty here (server.js fills them only when it serves the page).
 const left = readFileSync(path.join(out, "net", "onelobby.js"), "utf8") + readFileSync(path.join(out, "client.js"), "utf8") + readFileSync(path.join(out, "host.js"), "utf8");
 if (/['"][^'"\s]*\.mjs['"]/.test(left)) throw new Error("a .mjs import is left in the copy");
+
+// Cache-bust: the host sends no Cache-Control, so browsers kept old scripts next to new ones (a fresh input.js with a stale keys.js).
+// Each local <script src> / stylesheet href gets ?v=<hash of that file>, so an unchanged file stays cached and a changed one is refetched.
+const page = path.join(out, "index.html");
+let stamped = 0;
+writeFileSync(page, readFileSync(page, "utf8").replace(/(<script src="|<link rel="stylesheet" href=")([\w./-]+\.(?:js|css))"/g, (all, pre, file) => {
+  const f = path.join(out, file);
+  if (!existsSync(f)) return all;
+  stamped++;
+  return `${pre}${file}?v=${createHash("sha1").update(readFileSync(f)).digest("hex").slice(0, 10)}"`;
+}));
+if (stamped < 10) throw new Error(`only ${stamped} scripts stamped in index.html`);
 
 console.log(`Synced ${src} -> ${out}`);
