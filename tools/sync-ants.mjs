@@ -34,8 +34,9 @@ if (!existsSync(bundle)) {
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 cpSync(src, out, { recursive: true });
-// The package's bundle ends in a sourceMappingURL but ships no .map: strip it so browser devtools don't 404 on every load.
-writeFileSync(path.join(out, "onelobby.bundle.js"), readFileSync(bundle, "utf8").replace(/\n\/\/# sourceMappingURL=\S+\s*$/, "\n"));
+cpSync(bundle, path.join(out, "onelobby.bundle.js"));
+// Its source map too: the bundle ends in a sourceMappingURL, so without the .map devtools 404 on every load.
+if (existsSync(bundle + ".map")) cpSync(bundle + ".map", path.join(out, "onelobby.bundle.js.map"));
 
 function rewrite(file, from, to) {
   const text = readFileSync(file, "utf8");
