@@ -62,7 +62,7 @@
   panel.append(counts, actions, states, bar); // actions stay children[1] (camera.test.js); the states row sits under them
   const STATE_ICON = { fire: ['🚫', '🛡', '🔥'], move: ['⛨', '↩', '🏃'] };
   // Target priority (ant25): a dropdown under the state buttons; soldiers and spitters of the selection pick that caste first when several are in range.
-  const PREF_NAMES = ['Any target', 'Prefer workers', 'Prefer soldiers', 'Prefer spitters', 'Prefer majors', 'Prefer nurses', 'Prefer alates'];
+  const PREF_NAMES = ['Any target', 'Prefer workers', 'Prefer soldiers', 'Prefer spitters', 'Prefer majors', 'Prefer nurses', 'Prefer hawkers'];
   const pref = doc.createElement('select'); pref.id = 'sp-pref'; pref.setAttribute && pref.setAttribute('aria-label', 'Target priority');
   (pref.dataset || (pref.dataset = {})).tip = 'Target priority: Selected soldiers and spitters pick this kind of ant first when several are in range. Does not change their orders.';
   pref.innerHTML = PREF_NAMES.map((n, i) => `<option value="${i}">${n}</option>`).join('');

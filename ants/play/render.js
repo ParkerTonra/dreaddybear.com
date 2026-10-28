@@ -52,7 +52,7 @@ function renderSpriteQ() { return 2 ** (Math.round(Math.log2(Math.max(0.05, scal
 // After a q step the old atlases stay linked (A.prev, up to PREV_DEPTH generations) so ants are stamped from them, scaled by
 // stampAnt, while the new atlas fills at PAINT_BUDGET cells per frame. A big crowd used to repaint 150-190 cells in the one frame
 // after each step (20-40 ms of script, 50-100 ms gaps while zooming). The stale generations are freed once zooming settles.
-function renderFreeAtlas(A) { let b = 0; for (const P of A.pages) if (P) { P.canvas.width = 0; b += P.bytes; } A.pages.fill(null); return b; } // returns the bytes freed
+function renderFreeAtlas(A) { let b = 0; for (const P of A.pages) if (P) { if (!P.shared) P.canvas.width = 0; b += P.bytes; } A.pages.fill(null); return b; } // returns the bytes freed
 function renderSyncSprites() {
   const q = renderSpriteQ(), now = typeof performance !== 'undefined' ? performance.now() : 0;
   const moved = Render.lastScale > 0 && Math.abs(scale - Render.lastScale) > Render.lastScale * 5e-4; Render.lastScale = scale;
@@ -317,14 +317,16 @@ function antPage(A, bin) {
   let P = A.pages[bin];
   if (!P) {
     const cols = RenderCfg.GAIT, rows = RenderCfg.ANTENNA * 2 + 1;
+    if (A.png) { // PNG source (ant58 memory): no page copy. The page is a window onto the one decoded sheet (S.img: an ImageBitmap once decoded);
+      // rows are the sheet's stored rows (rowMap folds the repeated antenna/pose rows), so a colony's sheet is the only copy of its pixels in memory.
+      const S = A.png, j = Math.round(bin * S.bins / RenderCfg.HEADINGS) % S.bins; // sheet with fewer bins: nearest heading
+      P = A.pages[bin] = { get canvas() { return S.img; }, shared: true, yoff: j * S.rows * A.ch, painted: new Uint8Array(cols * rows).fill(1), used: 0, bytes: 0 };
+      A.n = (A.n || 0) + cols * rows;
+      return P;
+    }
     const canvas = Render.makeCanvas(A.cw * cols, A.ch * rows);
     P = A.pages[bin] = { canvas, g: canvas.getContext('2d'), painted: new Uint8Array(cols * rows), used: 0, bytes: canvas.width * canvas.height * 4 };
     Render.atlasBytes += P.bytes;
-    if (A.png) { // PNG source: the whole heading page comes out of the sheet in one drawImage, every cell counts as painted
-      const S = A.png, h = A.ch * rows, j = Math.round(bin * S.bins / RenderCfg.HEADINGS) % S.bins; // sheet with fewer bins: nearest heading
-      P.g.drawImage(S.img, 0, j * h, A.cw * cols, h, 0, 0, A.cw * cols, h);
-      P.painted.fill(1); A.n = (A.n || 0) + cols * rows;
-    }
   }
   return P;
 }
@@ -332,7 +334,7 @@ function antPage(A, bin) {
 // Drop the least recently stamped pages (never ones used this or last frame) until the atlases fit the cap again.
 function renderTrimAtlases() {
   const list = [];
-  for (const A of Render.atlases.values()) A.pages.forEach((P, bin) => { if (P && P.used < Render.frameNo - 1) list.push([P.used, A, bin]); });
+  for (const A of Render.atlases.values()) A.pages.forEach((P, bin) => { if (P && !P.shared && P.used < Render.frameNo - 1) list.push([P.used, A, bin]); });
   list.sort((a, b) => a[0] - b[0]);
   for (const [, A, bin] of list) {
     if (Render.atlasBytes <= RenderCfg.ATLAS_CAP) break;
@@ -432,7 +434,8 @@ function stampAnt(A, cell, B, x, y, ang, k, dx, dy, sx = 1, sy = 1) {
   ctx.setTransform(B.a * cs + B.c * sn, B.b * cs + B.d * sn, B.c * cs - B.a * sn, B.d * cs - B.b * sn, B.a * x + B.c * y + B.e, B.b * x + B.d * y + B.f);
   const G = RenderCfg.GAIT, rows = RenderCfg.ANTENNA * 2 + 1, col = cell % G, r2 = (cell - col) / G, row = r2 % rows, bin = (r2 - row) / rows;
   const r = k / A.k;
-  ctx.drawImage(antPage(A, bin).canvas, col * A.cw, row * A.ch, A.cw, A.ch, dx - A.ox * r * sx, dy - A.oy * r * sy, A.cw * r * sx, A.ch * r * sy); // ant18: squash/stretch about the ant's centre
+  const P = antPage(A, bin), srcY = (P.yoff || 0) + (A.png && A.png.rowMap ? A.png.rowMap[row] : row) * A.ch;
+  ctx.drawImage(P.canvas, col * A.cw, srcY, A.cw, A.ch, dx - A.ox * r * sx, dy - A.oy * r * sy, A.cw * r * sx, A.ch * r * sy); // ant18: squash/stretch about the ant's centre
 }
 
 const POSE = { sx: 1, sy: 1, fwd: 0, side: 0, lift: 0, kb: 0, jx: 0, jy: 0, edge: 0, edgeRim: 0, grow: 1, alpha: 1, emerge: 0, open: false, hx: 0, hy: 0 };

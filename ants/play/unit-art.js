@@ -17,7 +17,7 @@
     // ant16 castes (castes.js). tech: shown on the button until the colony has finished its first evolution tier.
     { id: 'nurse', name: 'Nurse', key: 'N', cost: 30, size: 1.25, abd: [-6, 4.6, 3.6], head: [4.8, 2.4, 2.2], jaws: false,
       tip: 'Heals the most hurt fighter near her. No bite and fragile: spitter splash and focus fire (F) kill her first.' },
-    { id: 'alate', name: 'Alate', key: 'B', cost: 25, tech: 'first evolution', size: 1.35, abd: [-6.4, 3.4, 2.4], head: [5, 2.2, 2], jaws: true,
+    { id: 'alate', name: 'Hawker', key: 'B', cost: 25, tech: 'first evolution', size: 1.35, abd: [-6.4, 3.4, 2.4], head: [5, 2.2, 2], jaws: true,
       tip: 'Winged raider: flies over rocks, mud and floods and hunts workers. Weak; spitters knock it down (double acid). Needs an upgrade first.' },
   ];
   const byId = Object.fromEntries(UNITS.map((u, i) => [u.id, i]));

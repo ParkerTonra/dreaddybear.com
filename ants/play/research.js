@@ -10,7 +10,7 @@
     { id: 'chitin', icon: '🛡️', name: 'Chitin', key: 'Y', desc: '+15% HP for every caste but workers, and 10% less nest damage, per tier',
       perk: 'Thick walls: your nest and finished buildings regrow 1.5 hp/s while no enemy fighter is within 4 tiles' },
     { id: 'acid', icon: '🧪', name: 'Acid glands', key: 'U', desc: '+0.25 spitter range and +0.12 splash per tier',
-      perk: 'Lingering acid: every glob leaves a puddle for 2.5 s that slows enemies to 60% (alates fly over it)' },
+      perk: 'Lingering acid: every glob leaves a puddle for 2.5 s that slows enemies to 60% (hawkers fly over it)' },
     { id: 'legs', icon: '🦵', name: 'Long legs', key: 'I', desc: '+7% speed for every ant per tier',
       perk: 'Weatherproof: rain and flood do not slow your ants (the enemy\'s still crawl), and mud slows you less' },
     { id: 'forage', icon: '🌾', name: 'Big crops', key: 'O', desc: '+1 food carried per worker trip per tier',

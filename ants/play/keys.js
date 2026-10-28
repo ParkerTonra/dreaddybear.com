@@ -41,7 +41,7 @@
   def('spawn.spitter', 'Colony', 'Spawn a spitter', b('KeyC', SH));
   def('spawn.major', 'Colony', 'Spawn a major', b('KeyV', SH));
   def('spawn.nurse', 'Colony', 'Spawn a nurse', b('KeyN', SH));
-  def('spawn.alate', 'Colony', 'Spawn an alate', b('KeyB', SH));
+  def('spawn.alate', 'Colony', 'Spawn a hawker', b('KeyB', SH));
 
   def('ability.trail', 'Abilities', 'Pheromone trail', b('KeyG', SH));
   def('ability.alarm', 'Abilities', 'Alarm', b('KeyJ', SH));
