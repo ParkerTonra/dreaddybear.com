@@ -86,6 +86,8 @@
   // first fight starts, and drifts back to calm after FIGHT_QUIET_S without one.
   const TRACKS = { lobby: ['ants'], calm: ['ants', 'dusk_colony', 'ember_dusk'], fight: ['swarm'] };
   const OPENS = { calm: 'ants' }; // the track a scene starts on when the caller names none
+  // Track name -> file stem. Music files get no ?v= cache-buster, so a re-recorded song gets a new stem (browsers kept v2).
+  const FILES = { ants: 'ants_v3' };
   const FIGHT_QUIET_S = 30, FADE_MS = 700;
   let music = null, musicErr = '', trackNow = '', scene = 'lobby', fadeK = 1, fadeTimer = null, lastFight = -1e9;
   const musicVolume = () => MUSIC_VOL * vol.music * vol.master * fadeK;
@@ -121,7 +123,7 @@
     if (!music) return;
     trackNow = first || nextTrack();
     music.volume = musicVolume();
-    music.src = 'assets/music/' + trackNow + '.ogg';
+    music.src = 'assets/music/' + (FILES[trackNow] || trackNow) + '.ogg';
     tryPlay();
   }
   // Every gesture: if the element exists but is not playing (refused earlier), ask again.

@@ -10,7 +10,7 @@ Sound effects (public/assets/sfx/)
 Files are the unmodified originals (already .ogg). Both packs are CC0: no credit is required; it is given anyway
 (Sound effects line in the ? help screen).
 Not used: the Monster Sound Pack (OGA, WAV only; needs conversion, see HANDOFF ant18/audio).
-ants.ogg: the game's own song (Parker, ants v3), in the lobby and in matches.
+ants_v3.ogg: the game's own song (Parker, ants v3), in the lobby and in matches.
 dusk_colony.ogg, ember_dusk.ogg, swarm.ogg: original placeholder tracks composed with Fontbard (Old School RuneScape soundfont), shuffled after ants.ogg.
 
 3D model (rendered to the worker ant sprite sheet, assets-src/worker/; tools/blender/render-worker.py)
