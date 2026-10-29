@@ -863,7 +863,7 @@ class Bot {
   // Fighting value of a group: hp times damage, relative to one fresh soldier. Workers count a little.
   // Frenzy doubles soldier bites only (game.js).
   strength(ants) {
-    const g = this.game, frenzy = g.event && g.event.id === 'frenzy' ? 2 : 1;
+    const g = this.game, frenzy = g.eventMod('soldierDmg');
     let s = 0;
     for (const a of ants) {
       const mul = isArmy(a) ? (a.type === 'soldier' ? frenzy : 1) * g.upgradeMul(a.colony, 'dmg') * (g.vetMul ? g.vetMul(a) : 1) : 1; // vetMul: veterans bite harder (their hp already carries the bonus)
@@ -1147,7 +1147,7 @@ class Bot {
     if (!b) return false;
     const pct = b.hp / 260; // what the snapshot shows as a health bar
     const close = fit.filter(a => d2(a, b) < 6);
-    const frenzy = g.event && g.event.id === 'frenzy' ? 2 : 1;
+    const frenzy = g.eventMod('soldierDmg');
     const dps = close.reduce((s, a) => s + (STATS[a.type] || STATS.soldier).dmg, 0) * frenzy * g.upgradeMul(this.colony, 'dmg');
     const killIn = dps ? (pct * 260) / dps : Infinity;
     const atHome = b.target === this.colony && d2(b, me.nest) < 5;
@@ -1862,7 +1862,7 @@ module.exports.CRUMB = CRUMB;
 // and the bookkeeping that tells a player what hurt them:
 //   Earthquake  ants within QUAKE.shelter of their own nest or a finished own structure take no damage
 //               (the 3 s warning is the call: pull the farm squad home, or hold the ring and eat it).
-//   Rainstorm   acid is washed: globs, mound shots and volleys do RAIN_ACID of their damage, trails are erased.
+//   Rainstorm   acid is washed: globs, mound shots and volleys do the rain row's `mods.acid` of their damage, trails are erased.
 //   Picnic      (id 'crumb') the colony with the least food gets +50 (ties random), a catch-up roll.
 //   Ledger      non-fight damage is tagged with its source (hurt()); a death files under stats[c].lostBy[cause]
 //               ('fight' when no tag is fresh), and quake / anteater deaths come out as one 'event-loss' log line
@@ -1870,16 +1870,69 @@ module.exports.CRUMB = CRUMB;
 // Snapshot (additive): players[].idle (workers with nothing to do), stats[].lostBy (game.js).
 
 const QUAKE = { dmg: 12, shelter: 1.5 };
-const RAIN_ACID = 0.7;
 const CAUSE_FRESH = 1; // a tagged hit counts as the killing blow if it landed this many seconds ago or less
 const EVENT_CAUSES = ['quake', 'anteater']; // the causes that get a toast
 
-function install(Game, { dist }) {
+function install(Game, { dist, BEETLE, COLONY_NAMES }) {
   const P = Game.prototype;
+
+  // Per-id lifecycle hooks, called from game.js rollEvent / startEvent. Rows without a hook are pure `mods` events.
+  //   prepare(g, ev, alive)  at the roll, before any telegraph; may draw from g.rand() and fill ev.target / ev.line / ev.desc
+  //   start(g, ev)           when the event goes live (after `warn` seconds); may draw from g.rand()
+  // The rand() call order is part of the replay hash: keep it as it was when moving code in here.
+  P.eventHandlers = {
+    bloom: {
+      start(g, ev) {
+        // Mirrored pairs so the bloom never favours one side.
+        const MAP = g.map;
+        for (let i = 0; i < 2; i++) {
+          const x = 1 + g.rand() * (MAP - 2), y = 1 + g.rand() * (MAP - 2), amt = 30 + Math.floor(g.rand() * 30);
+          g.addFood(x, y, amt);
+          g.addFood(MAP - x, MAP - y, amt);
+        }
+      },
+    },
+    crumb: {
+      prepare(g, ev, alive) {
+        ev.target = g.pickCrumb(alive); // the poorest colony, ties by the dice
+        ev.desc = `${COLONY_NAMES[ev.target]} colony finds a picnic (+50 food, the least in the game)`;
+      },
+      start(g, ev) { g.players[ev.target].food += 50; },
+    },
+    anteater: {
+      prepare(g, ev) { ev.line = g.anteaterLine(); },
+      start(g, ev) {
+        const [from, to] = ev.line;
+        g.anteater = { x: from.x, y: from.y, path: [from, to], dir: Math.atan2(to.y - from.y, to.x - from.x) };
+      },
+    },
+    quake: {
+      start(g) { g.quakeHit(); }, // ants near a nest or building are safe
+    },
+    beetle: {
+      prepare(g, ev, alive) {
+        // Catch-up mechanic: the beetle goes for the colony sitting on the most food (ties broken at random).
+        const top = Math.max(...alive.map(p => p.food));
+        const rich = alive.filter(p => p.food === top);
+        ev.target = rich[Math.floor(g.rand() * rich.length)].colony;
+        ev.desc = `A giant beetle marches on ${COLONY_NAMES[ev.target]}'s nest (richest colony). Squash it for food!`;
+      },
+      start(g, ev) { g.beetle = { x: g.map / 2, y: g.map / 2, hp: BEETLE.hp, target: ev.target, dir: 0, until: g.time + ev.dur }; },
+    },
+    swap: {
+      start(g) {
+        // Colony c swaps with c ^ 1: Red<->Blue, Orange<->Purple (always opponents).
+        for (let c = 0; c + 1 < g.players.length; c += 2) {
+          const a = g.players[c], b = g.players[c + 1];
+          [a.rally, b.rally] = [b.rally, a.rally];
+        }
+      },
+    },
+  };
 
   // Multiplier on every acid hit (spitter glob, mound shot, volley).
   P.acidMul = function () {
-    return this.event && this.event.id === 'rain' ? RAIN_ACID : 1;
+    return this.eventMod('acid'); // RAIN_ACID lives in the EVENTS row (game.js)
   };
 
   // Damage with a source: the ledger blames `cause` if this is what finishes the ant.
@@ -1943,7 +1996,7 @@ function install(Game, { dist }) {
   };
 }
 
-module.exports = { install, QUAKE, RAIN_ACID, EVENT_CAUSES };
+module.exports = { install, QUAKE, EVENT_CAUSES };
 
 },
 "fog.js": function (module, exports, require) {
@@ -2283,23 +2336,26 @@ const ORDERS = require("orders.js")({ STATS, AGGRO, DT, dist, clamp, tickType: (
 const TERRAIN = require("terrain.js"); // rocks + mud, and pathing around rocks (hooks moveToward)
 
 // Chaos dice: a d10, one face per event. `warn` = seconds of on-map telegraph before a damaging event hits.
+// `mods` = numeric effects while the event is live, read with Game#eventMod(key, dflt = 1): speed (all ants), acid (acid hits),
+// soldierDmg (bite damage), delivery (food delivered to a nest counts this many times).
 const EVENT_WARN = 3;
 const ANTEATER_CLEAR = 4; // the anteater's line through the map centre keeps at least this far from every nest
 // ant17/polish nerf: one bite at a time (bite dmg every biteEvery s), tiny nest chew, slower walk.
 const BEETLE = { hp: 260, speed: 0.8, reach: 1.2, engage: 5, slow: 0.45, nestDps: 2.5, loot: 60 }; // it ignores ants (never bites them), walks to the nest, and idle fighters swarm it
 const FLOOD = { halfWidth: 1.3, slow: 0.25 }; // river along the centre line between the two teams
 const HARVEST_MUL = 2;
+const RAIN_SPEED = 0.5, RAIN_ACID = 0.7, FRENZY_DMG = 2; // read through Game#eventMod via the rows' `mods`
 
 const EVENTS = [
-  { roll: 1, id: 'rain', name: 'Rainstorm', desc: 'All ants crawl at half speed; acid is washed to 70% and pheromone trails vanish', dur: 8 },
+  { roll: 1, id: 'rain', name: 'Rainstorm', desc: 'All ants crawl at half speed; acid is washed to 70% and pheromone trails vanish', dur: 8, mods: { speed: RAIN_SPEED, acid: RAIN_ACID } },
   { roll: 2, id: 'bloom', name: 'Food Bloom', desc: 'Fresh food scattered across the map', dur: 0 },
   { roll: 3, id: 'anteater', name: 'Anteater!', desc: 'A hungry anteater charges through the middle', dur: 12, warn: EVENT_WARN },
   { roll: 4, id: 'crumb', name: 'Picnic', desc: 'The colony with the least food finds a picnic', dur: 0 },
-  { roll: 5, id: 'frenzy', name: 'Frenzy', desc: 'Soldiers deal double damage', dur: 8 },
+  { roll: 5, id: 'frenzy', name: 'Frenzy', desc: 'Soldiers deal double damage', dur: 8, mods: { soldierDmg: FRENZY_DMG } },
   { roll: 6, id: 'quake', name: 'Earthquake', desc: 'Ants within 1.5 of their own nest or a building are safe; every other ant takes 12 damage', dur: 0, warn: EVENT_WARN },
   { roll: 7, id: 'beetle', name: 'Beetle Boss', desc: 'A giant beetle marches on the richest nest', dur: 22, warn: EVENT_WARN },
   { roll: 8, id: 'flood', name: 'Flash Flood', desc: 'A river splits the map: ants in it wade at quarter speed', dur: 7, warn: EVENT_WARN },
-  { roll: 9, id: 'harvest', name: 'Harvest Season', desc: 'Food delivered to nests counts double', dur: 10 },
+  { roll: 9, id: 'harvest', name: 'Harvest Season', desc: 'Food delivered to nests counts double', dur: 10, mods: { delivery: HARVEST_MUL } },
   { roll: 10, id: 'swap', name: 'Flag Swap!', desc: 'Pranksters swap rally flags with the enemy', dur: 0 },
 ];
 
@@ -2446,8 +2502,14 @@ class Game {
     return g;
   }
 
+  // A numeric effect of the live event (see EVENTS `mods`), `dflt` when no event or the event doesn't touch `key`.
+  eventMod(key, dflt = 1) {
+    const m = this.event && this.event.mods;
+    return m && key in m ? m[key] : dflt;
+  }
+
   speedMul() {
-    return this.event && this.event.id === 'rain' ? 0.5 : 1;
+    return this.eventMod('speed');
   }
 
   moveToward(a, tx, ty, speed) {
@@ -2478,7 +2540,7 @@ class Game {
 
   tickSoldier(a) {
     const s = STATS.soldier;
-    const dmg = s.dmg * (this.event && this.event.id === 'frenzy' ? 2 : 1) * this.upgradeMul(a.colony, 'dmg') * this.abilityDmg(a) * DT; // abilityDmg: ant16 alarm pheromone
+    const dmg = s.dmg * this.eventMod('soldierDmg') * this.upgradeMul(a.colony, 'dmg') * this.abilityDmg(a) * DT; // abilityDmg: ant16 alarm pheromone
     const foe = this.pickTarget(a);
     if (foe) {
       const d = dist(a, foe);
@@ -2504,18 +2566,8 @@ class Game {
     const roll = 1 + Math.floor(this.rand() * EVENTS.length);
     const ev = { ...EVENTS[roll - 1] };
     const alive = this.players.filter(p => p.alive);
-    if (ev.id === 'crumb') {
-      ev.target = this.pickCrumb(alive); // events.js: the poorest colony, ties by the dice
-      ev.desc = `${COLONY_NAMES[ev.target]} colony finds a picnic (+50 food, the least in the game)`;
-    } else if (ev.id === 'anteater') {
-      ev.line = this.anteaterLine();
-    } else if (ev.id === 'beetle') {
-      // Catch-up mechanic: the beetle goes for the colony sitting on the most food (ties broken at random).
-      const top = Math.max(...alive.map(p => p.food));
-      const rich = alive.filter(p => p.food === top);
-      ev.target = rich[Math.floor(this.rand() * rich.length)].colony;
-      ev.desc = `A giant beetle marches on ${COLONY_NAMES[ev.target]}'s nest (richest colony). Squash it for food!`;
-    }
+    const h = this.eventHandlers[ev.id]; // events.js: per-id prepare (rolled with the die, before the telegraph) and start
+    if (h && h.prepare) h.prepare(this, ev, alive);
     this.pending = { ev, at: this.time + (ev.warn || 0) };
     this.log.push({ kind: 'event', roll, id: ev.id, name: ev.name, desc: ev.desc, dur: ev.dur, warn: ev.warn || 0 });
     if (!ev.warn) this.startEvent();
@@ -2535,33 +2587,11 @@ class Game {
   }
 
   startEvent() {
-    const MAP = this.map;
     const ev = this.pending.ev;
     this.pending = null;
     ev.endsAt = this.time + ev.dur;
-    if (ev.id === 'bloom') {
-      // Mirrored pairs so the bloom never favours one side.
-      for (let i = 0; i < 2; i++) {
-        const x = 1 + this.rand() * (MAP - 2), y = 1 + this.rand() * (MAP - 2), amt = 30 + Math.floor(this.rand() * 30);
-        this.addFood(x, y, amt);
-        this.addFood(MAP - x, MAP - y, amt);
-      }
-    } else if (ev.id === 'crumb') {
-      this.players[ev.target].food += 50;
-    } else if (ev.id === 'quake') {
-      this.quakeHit(); // events.js: ants near a nest or building are safe
-    } else if (ev.id === 'anteater') {
-      const [from, to] = ev.line;
-      this.anteater = { x: from.x, y: from.y, path: [from, to], dir: Math.atan2(to.y - from.y, to.x - from.x) };
-    } else if (ev.id === 'beetle') {
-      this.beetle = { x: MAP / 2, y: MAP / 2, hp: BEETLE.hp, target: ev.target, dir: 0, until: this.time + ev.dur };
-    } else if (ev.id === 'swap') {
-      // Colony c swaps with c ^ 1: Red<->Blue, Orange<->Purple (always opponents).
-      for (let c = 0; c + 1 < this.players.length; c += 2) {
-        const a = this.players[c], b = this.players[c + 1];
-        [a.rally, b.rally] = [b.rally, a.rally];
-      }
-    }
+    const h = this.eventHandlers[ev.id];
+    if (h && h.start) h.start(this, ev);
     this.event = ev;
   }
 
@@ -2572,7 +2602,7 @@ class Game {
     if (e && (e.id === 'anteater' ? !this.anteater : e.id === 'beetle' ? !this.beetle : this.time >= e.endsAt)) this.event = null;
     const id = this.event && this.event.id;
     this.floodPos = id === 'flood' ? new Map(this.ants.map(a => [a.id, [a.x, a.y]])) : null;
-    this.foodPre = id === 'harvest' ? this.players.map(p => p.food) : null;
+    this.foodPre = this.eventMod('delivery') !== 1 ? this.players.map(p => p.food) : null;
   }
 
   // Runs after ants move: flood drag, harvest bonus, beetle boss.
@@ -2586,7 +2616,7 @@ class Game {
         a.y = o[1] + (a.y - o[1]) * FLOOD.slow;
       }
     }
-    if (this.foodPre) this.players.forEach((p, i) => { if (p.food > this.foodPre[i]) p.food += (p.food - this.foodPre[i]) * (HARVEST_MUL - 1); });
+    if (this.foodPre) this.players.forEach((p, i) => { if (p.food > this.foodPre[i]) p.food += (p.food - this.foodPre[i]) * (this.eventMod('delivery') - 1); });
     this.tickBeetle();
   }
 
@@ -2603,7 +2633,7 @@ class Game {
     if (this.time >= b.until || !home || !home.alive) { this.beetle = null; return; } // burrows away
     // Ants never get bitten: the beetle only wants the nest. Every ant in reach bites it, idle fighters nearby
     // rush it, and ants touching it slow it (a wall of fighters holds it up; a lone ant barely does).
-    const frenzy = this.event && this.event.id === 'frenzy' ? 2 : 1;
+    const frenzy = this.eventMod('soldierDmg');
     let touching = 0;
     for (const a of this.ants) {
       if (a.hp <= 0) continue;
@@ -2745,7 +2775,7 @@ const TICK_FN = { worker: 'tickWorker', soldier: 'tickSoldier', spitter: 'tickSp
 Object.assign(Game.prototype, require("combat.js")({ STATS, AGGRO, COMBAT }));
 Object.assign(Game.prototype, require("units.js")({ STATS, DT }));
 require("economy.js")(Game, { STATS, ECON, DT, dist, clamp });
-require("events.js").install(Game, { dist }); // ant31: quake shelter, rain washes acid, ledger (hurt / noteLoss / idle); before objectives and structures use hurt()
+require("events.js").install(Game, { dist, BEETLE, COLONY_NAMES }); // ant31: quake shelter, rain washes acid, ledger (hurt / noteLoss / idle); before objectives and structures use hurt()
 require("objectives.js").install(Game, { STATS, DT }); // ant16: aphid farms, spider lairs, match clock (before terrain wraps snapshot)
 TERRAIN.install(Game, { DT }); // wraps moveToward (path around rocks, mud slows) and snapshot (adds terrain)
 RESEARCH.install(Game, { STATS, DT }); // research lane: evolutions; wraps initEconomy, tickEconomy, spawn, moveToward, snapshot
@@ -2994,7 +3024,7 @@ function install(Game, { STATS, DT }) {
   };
 
   P.tickLairs = function () {
-    const frenzy = this.event && this.event.id === 'frenzy' ? 2 : 1;
+    const frenzy = this.eventMod('soldierDmg');
     for (const L of this.lairs) {
       const s = L.spider;
       if (!s) { if (this.time >= L.respawnAt) { this.spawnSpider(L); this.log.push({ kind: 'obj', what: 'spider-back', lair: this.lairs.indexOf(L) }); } continue; }
@@ -3510,7 +3540,7 @@ module.exports = ({ STATS, AGGRO, DT, dist, clamp, tickType }) => {
     a.order = a.type === 'worker' ? null : { kind: 'guard', x: at.x, y: at.y };
   }
 
-  const frenzy = g => (g.event && g.event.id === 'frenzy' ? 2 : 1);
+  const frenzy = g => g.eventMod('soldierDmg');
   const upMul = (g, colony, id) => (g.upgradeMul ? g.upgradeMul(colony, id) : 1);
   const nestReach = a => (a.type === 'spitter' ? STATS.spitter.range : a.type === 'major' ? 1.3 : NEST_REACH) - 0.05;
   const enemyFighterNear = (g, a, r) => g.enemiesNear(a.team, a, r).some(([b]) => b.type !== 'worker');
@@ -5344,7 +5374,7 @@ module.exports = function installStructures(Game, { STATS, AGGRO, COMBAT, DT, cl
       g.shots.push([a.x, a.y, best.x, best.y, a.colony]);
       return;
     }
-    const frenzy = a.type === 'soldier' && g.event && g.event.id === 'frenzy' ? 2 : 1;
+    const frenzy = a.type === 'soldier' ? g.eventMod('soldierDmg') : 1;
     best.hp -= st.dmg * frenzy * (st.siege || 1) * g.armyMul(a.colony) * g.abilityDmg(a) * armor * DT;
   }
   // How close a fighter must be to strike structure s.
