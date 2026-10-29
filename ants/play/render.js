@@ -140,7 +140,8 @@ function drawGround(map) {
   // Snap the layer's corner to a device pixel so the blit is 1:1 (crisp tile edges).
   const left = Math.floor((o.x + minX) * dpr) / dpr, top = Math.floor((o.y + minY) * dpr) / dpr;
   if (!L || L.key !== key) {
-    const canvas = L && L.canvas.width === w && L.canvas.height === h ? L.canvas : Render.makeCanvas(w, h);
+    const reuse = L && L.canvas.width === w && L.canvas.height === h, canvas = reuse ? L.canvas : Render.makeCanvas(w, h);
+    if (L && !reuse) L.canvas.width = 0; // ant75: free the replaced layer now (see TerrainDraw releaseCanvas)
     const g = canvas.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h);
     g.setTransform(dpr, 0, 0, dpr, -left * dpr, -top * dpr);
@@ -208,6 +209,7 @@ function nestSprite(p, side) {
   Render.rebakes--;
   const nb = window.WorldArt ? WorldArt.NEST_BOX : { L: 54, R: 56, T: 56, B: 30 }; // ant18/ground: room for the long shadow
   const L = Math.ceil(nb.L * q) + 2, R = Math.ceil(nb.R * q) + 2, T = Math.ceil(nb.T * q) + 2, B = Math.ceil(nb.B * q) + 2;
+  if (S) S.canvas.width = 0; // ant75: the old bake goes now, not at the next GC
   S = { key, q, canvas: Render.makeCanvas(L + R, T + B), ox: L / q, oy: T / q, w: (L + R) / q, h: (T + B) / q };
   paintNest(S.canvas.getContext('2d'), { x: L, y: T }, q, p, side);
   Render.nests.set(side, S);
@@ -263,7 +265,8 @@ function drawFood(f) {
   if (!S || S.amt !== f[3] || (S.q !== q && Render.rebakes > 0)) {
     if (S && S.amt === f[3]) Render.rebakes--;
     const half = Math.ceil((window.WorldArt ? 36 : 30) * q) + 2;
-    const canvas = S && S.canvas.width === half * 2 ? S.canvas : Render.makeCanvas(half * 2, half * 2);
+    const same = S && S.canvas.width === half * 2, canvas = same ? S.canvas : Render.makeCanvas(half * 2, half * 2);
+    if (S && !same) S.canvas.width = 0; // ant75
     const g = canvas.getContext('2d');
     g.clearRect(0, 0, half * 2, half * 2);
     paintFood(g, { x: half, y: half }, q, f);

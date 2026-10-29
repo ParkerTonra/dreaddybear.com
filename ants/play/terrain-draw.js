@@ -38,6 +38,9 @@
 
   const doc = root.document;
   const makeCanvas = (w, h) => { if (!doc) return null; const c = doc.createElement('canvas'); c.width = w; c.height = h; return c; };
+  // ant75: a replaced layer canvas is zeroed, not left to the garbage collector. A Huge board layer is up to 64 MB and the rock layer matches it;
+  // every density step of a zoom made a pair, and Firefox kept the dropped ones (hundreds of MB) until a GC that never came in time: tab crash.
+  const releaseCanvas = c => { if (c && c.width) c.width = 0; };
   const reduced = () => !!(root.Settings && root.Settings.reduced && root.Settings.reduced());
 
   function hash(x, y, seed) {
@@ -413,7 +416,8 @@
     const defer = L.key !== key && L.canvas && L.base === base && now - L.wantAt < SETTLE_MS && D / L.D < MAX_BLUR;
     if (L.key !== key && !defer) {
       const cw = Math.ceil(w1 * D), ch = Math.ceil(h1 * D);
-      const canvas = L.canvas && L.canvas.width === cw && L.canvas.height === ch ? L.canvas : (env.makeCanvas || makeCanvas)(cw, ch);
+      const reuse = L.canvas && L.canvas.width === cw && L.canvas.height === ch, canvas = reuse ? L.canvas : (env.makeCanvas || makeCanvas)(cw, ch);
+      if (!reuse) releaseCanvas(L.canvas);
       const g = canvas.getContext('2d');
       g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cw, ch);
       g.setTransform(D, 0, 0, D, -B.minU * D, -B.minV * D);
@@ -580,7 +584,7 @@
     if (first) {
       R.key = key; R.ver = t.ver; R.w = L.w; R.h = L.h; R.info = info; R.baked = new Set(); R.next = 0; R.rocksRef = t.rocks;
       if (R.canvas && R.canvas.width === R.w && R.canvas.height === R.h) { const g0 = R.canvas.getContext('2d'); g0.setTransform(1, 0, 0, 1, 0, 0); g0.clearRect(0, 0, R.w, R.h); }
-      else R.canvas = (env.makeCanvas || makeCanvas)(R.w, R.h);
+      else { releaseCanvas(R.canvas); R.canvas = (env.makeCanvas || makeCanvas)(R.w, R.h); }
       const sgn = flip ? -1 : 1; // back to front: smaller screen y first
       R.order = t.rocks.slice().sort((a, b) => sgn * ((a[0] + a[1]) - (b[0] + b[1])));
     }

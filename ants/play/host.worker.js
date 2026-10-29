@@ -5554,6 +5554,7 @@ function rng(seed) {
 const N8X = [1, -1, 0, 0, 1, 1, -1, -1], N8Y = [0, 0, 1, -1, 1, -1, 1, -1], N8W = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
 const N8 = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]];
 
+const FIELD_CACHE_BYTES = 64 * 1048576; // path-field cache budget per game (was 256 MB; a 12 min Huge 4-seat match filled all of it, no tick-time cost at 64 MB) (ant75 measured how full it gets: tools/soak-mem.js HOST=1)
 class Terrain {
   constructor(map, cells) {
     this.map = map;
@@ -5696,8 +5697,8 @@ class Terrain {
       }
     }
     this.fields.set(goal, f);
-    // Bounded cache: a Huge board's field is 4 bytes a tile, so keep about 256 MB of them (oldest out first).
-    const cap = Math.max(64, Math.floor(268435456 / (4 * n)));
+    // Bounded cache: a Huge board's field is 4 bytes a tile, so keep FIELD_CACHE_BYTES of them (oldest out first).
+    const cap = Math.max(64, Math.floor((this.fieldCacheBytes || FIELD_CACHE_BYTES) / (4 * n)));
     if (this.fields.size > cap) this.fields.delete(this.fields.keys().next().value);
     return f;
   }
