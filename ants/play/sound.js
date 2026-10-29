@@ -81,9 +81,11 @@
   const vol = loadVol();
   // ---------- Music: the game's own song, looped (ants.ogg), started on the first gesture ----------
   const MUSIC_VOL = 0.4;
-  // assets/music/<name>.ogg. Lobby: the game's own song. A match opens calm (Fontbard placeholders, dusk_colony first),
-  // cuts to Swarm when the first fight starts, and drifts back to calm after FIGHT_QUIET_S without one.
-  const TRACKS = { lobby: ['ants'], calm: ['dusk_colony', 'ember_dusk'], fight: ['swarm'] };
+  // assets/music/<name>.ogg. Lobby: the game's own song. A match opens calm on the game's song too (OPENS; it keeps playing,
+  // no restart, when the lobby already has it on), then shuffles it with the Fontbard placeholders, cuts to Swarm when the
+  // first fight starts, and drifts back to calm after FIGHT_QUIET_S without one.
+  const TRACKS = { lobby: ['ants'], calm: ['ants', 'dusk_colony', 'ember_dusk'], fight: ['swarm'] };
+  const OPENS = { calm: 'ants' }; // the track a scene starts on when the caller names none
   const FIGHT_QUIET_S = 30, FADE_MS = 700;
   let music = null, musicErr = '', trackNow = '', scene = 'lobby', fadeK = 1, fadeTimer = null, lastFight = -1e9;
   const musicVolume = () => MUSIC_VOL * vol.music * vol.master * fadeK;
@@ -92,11 +94,13 @@
     let t; do { t = list[Math.floor(Math.random() * list.length)]; } while (t === trackNow && list.length > 1);
     return t;
   }
-  // first: a track name to start with (a new match opens on dusk_colony). Fades the old track out, then swaps.
-  function setScene(next, first) {
+  // first: a track name to start with (default OPENS[next]). Fades the old track out, then swaps; if that track is already
+  // playing it just carries on.
+  function setScene(next, first = OPENS[next]) {
     if (next === scene || !TRACKS[next]) return;
     scene = next;
     if (!music) return;
+    if (first && first === trackNow && !music.paused) return;
     clearInterval(fadeTimer);
     const t0 = Date.now();
     fadeTimer = setInterval(() => {

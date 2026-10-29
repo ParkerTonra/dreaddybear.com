@@ -220,7 +220,7 @@ function onMessage(m) {
     onMessage.left = false;
     prev = curr = null; banner = null; NetBuf.reset(); fxSnap = null; rallyAt = null;
     if (window.Camera) Camera.reset(true); // every match starts on the whole-board view
-    if (window.Sound) Sound.setScene('calm', 'dusk_colony');
+    if (window.Sound) Sound.setScene('calm');
     for (const id of ['lobby', 'end']) $(id).classList.add('hidden');
     for (const id of ['hud-top', 'hud-bottom']) $(id).classList.toggle('hidden', id === 'hud-bottom' && mySide < 0);
     $('hud-top').classList.remove('hidden');
