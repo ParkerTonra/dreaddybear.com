@@ -1,9 +1,9 @@
 // Host a game from this tab (ant38). On a static copy of the game (no node server.js behind the page) the tab itself
-// runs the game server: host.bundle.js (built from room-core by tools/build-host.js) holds the rooms, OneLobby's
+// runs the game server: host.worker.js / host.bundle.js (built from room-core by tools/build-host.js) hold the rooms, OneLobby's
 // kit.hostNostr() hands friends a join code through public Nostr relays, and this tab plays over an in-memory socket
 // (client.js's localHost). Pages served by server.js only expose the in-tab server for solo play (solo.js); pages joining
 // someone else's game (?dc=CODE) do nothing here.
-// Load order: after client.js (uses $, join, localHost). host.bundle.js and OneLobby load only when needed.
+// Load order: after client.js (uses $, join, localHost). the host scripts and OneLobby load only when needed.
 (function () {
   const params = new URLSearchParams(location.search);
   const nodeServer = !!document.querySelector('meta[name="node-server"]')?.content;
@@ -19,10 +19,21 @@
     s.src = src; s.onload = res; s.onerror = () => rej(new Error(`Could not load ${src}`));
     document.head.appendChild(s);
   });
-  // The in-tab game server, created on first use (Learn to play uses it too, with no join code).
-  const ensureHost = () => hostPromise || (hostPromise = (window.AntHost ? Promise.resolve() : loadScript('host.bundle.js'))
-    .then(() => AntHost.create({ onError: e => console.error('Browser host:', e) }))
-    .catch(e => { hostPromise = null; throw e; }));
+  // The in-tab game server, created on first use (Learn to play uses it too, with no join code). It runs in a Web Worker
+  // (host-proxy.js + host.worker.js, ant72) so slow drawing cannot slow the match; if the worker cannot start, or the page
+  // has ?hostthread=main, it runs on the main thread from host.bundle.js (browser-host.js), the way it did before.
+  async function startHost() {
+    const onError = e => console.error('Browser host:', e);
+    if (window.Worker && params.get('hostthread') !== 'main') {
+      try {
+        if (!window.AntHostProxy) await loadScript('host-proxy.js');
+        return await AntHostProxy.create({ onError });
+      } catch (e) { console.warn('Host worker unavailable, hosting on the main thread:', e); }
+    }
+    if (!window.AntHost) await loadScript('host.bundle.js');
+    return AntHost.create({ onError });
+  }
+  const ensureHost = () => hostPromise || (hostPromise = startHost().catch(e => { hostPromise = null; throw e; }));
 
   const inTab = {
     code: '',

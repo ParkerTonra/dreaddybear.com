@@ -15,9 +15,43 @@
 //   ant's origin sits inside a cell. render.js stamps at the real zoom by scaling k down or up, so a sheet needs no repaint on zoom.
 //   screenHeading: true (ant64 tilted camera): row i is the ant ALREADY turned to screen angle i * 360 / bins (a 3/4 view, not rotatable like a top-down
 //   one), so the game turns the cell only by the residual heading - i * 360 / bins; without it every cell faces +x and is turned by the whole heading.
+//   hi (ant71, optional): a 2x tier for close zoom, loaded lazily. { src, k, cw, ch, ox, oy, gait, rows, bins, rowMap } with the same fields as the sheet itself;
+//   fewer gait columns (the game maps its 9 onto them) and rowMap entries of -1 for rows the tier does not carry (corpses: they keep the 1x cell).
+//   hi(side, type, ratio) is asked per frame with ratio = device px per ant unit on screen / the 1x sheet's k: below HI_PREFETCH it does nothing, from there on
+//   it starts the download and decode (into an ImageBitmap, so the switch never decodes mid-frame), above HI_USE it returns the ready tier. Decoded bytes of
+//   loaded tiers stay under HI_CAP (least recently used goes first, never one used in the last second) and every tier is released HI_IDLE_MS after the zoom left it.
 (function (root) {
   'use strict';
+  const HI_PREFETCH = 0.8, HI_USE = 1.05, HI_CAP = 200e6, HI_IDLE_MS = 8000, HI_BUSY_MS = 1000;
+  const nowMs = () => (root.performance && root.performance.now ? root.performance.now() : Date.now());
   const entries = new Map(); // 'side:type' or 'type' -> { m, img, state: 'loading' | 'ready' | 'failed' }
+  const hiOk = h => !!h && typeof h.src === 'string' && ['k', 'cw', 'ch', 'gait', 'rows', 'bins'].every(f => Number.isFinite(h[f]) && h[f] > 0) && Number.isFinite(h.ox) && Number.isFinite(h.oy) && Array.isArray(h.rowMap) && h.rowMap.length === 7;
+  const hiSize = m => m.gait * m.cw * m.bins * m.rows * m.ch * 4; // decoded bytes
+  function dropHi(e) {
+    const h = e.hi;
+    if (!h || h.state === 'idle') return;
+    if (h.img && h.img.close) h.img.close();
+    h.img = null; h.S = null; h.state = 'idle'; h.gen = (h.gen || 0) + 1; // a decode still in flight sees the new generation and discards itself
+  }
+  function loadHi(e, base) {
+    const h = e.hi, m = h.m, gen = h.gen = (h.gen || 0) + 1;
+    h.state = 'loading';
+    const img = api.imageFactory(), fail = () => { if (h.gen === gen) { h.state = 'failed'; if (root.console) console.warn('atlas-loader: could not load 2x tier ' + m.src); } };
+    const done = pic => {
+      if (h.gen !== gen) { if (pic && pic.close) pic.close(); return; }
+      const w = pic.naturalWidth || pic.width, hh = pic.naturalHeight || pic.height;
+      if (w !== m.gait * m.cw || hh !== m.bins * m.rows * m.ch) return fail(); // the PNG does not match its manifest
+      h.img = pic; h.S = { img: pic, k: m.k, cw: m.cw, ch: m.ch, ox: m.ox, oy: m.oy, gait: m.gait, rows: m.rows, bins: m.bins, rowMap: m.rowMap };
+      h.state = 'ready';
+    };
+    img.onload = () => {
+      if (h.gen !== gen) return;
+      if (root.createImageBitmap && typeof root.createImageBitmap === 'function') root.createImageBitmap(img).then(done, fail); else done(img);
+    };
+    img.onerror = fail;
+    img.crossOrigin = 'anonymous';
+    img.src = (base || '') + m.src;
+  }
   const api = {
     ver: 0, // bumps whenever a sheet becomes ready or is removed: render.js rebuilds the affected atlases
     imageFactory: () => new root.Image(), // tests replace it
@@ -34,7 +68,7 @@
       const pos = f => Number.isFinite(m[f]) && m[f] > 0;
       const ok = m && t >= 0 && typeof m.src === 'string' && ['k', 'cw', 'ch', 'gait', 'rows', 'bins'].every(pos) && Number.isFinite(m.ox) && Number.isFinite(m.oy);
       if (!ok) return null;
-      const e = { m: Object.assign({}, m, { type: t }), img: null, state: 'loading' };
+      const e = { m: Object.assign({}, m, { type: t }), img: null, state: 'loading', base, hi: hiOk(m.hi) ? { m: m.hi, state: 'idle', used: 0, img: null, S: null } : null };
       const key = api.key(m.side, t);
       entries.set(key, e);
       const img = e.img = api.imageFactory();
@@ -50,8 +84,31 @@
       img.src = base + m.src;
       return e;
     },
-    remove(side, type) { const k = api.key(side, api.typeIndex(type)); if (entries.delete(k)) api.ver++; },
-    clear() { if (entries.size) { entries.clear(); api.ver++; } },
+    HI_CAP, HI_USE, HI_PREFETCH, HI_IDLE_MS,
+    hiBytes() { let n = 0; for (const e of entries.values()) if (e.hi && e.hi.state !== 'idle' && e.hi.state !== 'failed') n += hiSize(e.hi.m); return n; },
+    hiStats() { const o = {}; for (const [k, e] of entries) if (e.hi) o[k] = e.hi.state; return o; },
+    // The 2x tier of (side, type) for the given on-screen ratio, or null (the caller stamps the 1x sheet).
+    hi(side, type, ratio, now = nowMs()) {
+      const t = api.typeIndex(type), e = entries.get(api.key(side, t)) || entries.get(api.key(null, t));
+      if (!e || !e.hi || e.state !== 'ready' || ratio < HI_PREFETCH) return null;
+      const h = e.hi;
+      h.used = now;
+      if (h.state === 'idle') {
+        const need = hiSize(h.m);
+        if (api.hiBytes() + need > HI_CAP) { // make room: oldest tiers not drawn in the last second
+          const old = [...entries.values()].filter(x => x.hi && x.hi.state === 'ready' && now - x.hi.used > HI_BUSY_MS).sort((a, b) => a.hi.used - b.hi.used);
+          for (const x of old) { if (api.hiBytes() + need <= HI_CAP) break; dropHi(x); }
+          if (api.hiBytes() + need > HI_CAP) return null; // everything loaded is in use: stay on 1x
+        }
+        loadHi(e, e.base);
+      }
+      if (h.state !== 'ready' || ratio < HI_USE) return null;
+      return h.S;
+    },
+    // Release tiers nobody has asked for lately (the zoom went back out). Called by the loader's own timer.
+    trimHi(now = nowMs()) { for (const e of entries.values()) if (e.hi && e.hi.state === 'ready' && now - e.hi.used > HI_IDLE_MS) dropHi(e); },
+    remove(side, type) { const k = api.key(side, api.typeIndex(type)); const e = entries.get(k); if (e) dropHi(e); if (entries.delete(k)) api.ver++; },
+    clear() { if (entries.size) { for (const e of entries.values()) dropHi(e); entries.clear(); api.ver++; } },
     // The ready sheet for a colony and caste whose layout is `gait` x `rows`, or null (painter). A per-colony entry wins over an all-colony one.
     sheet(side, type, gait, rows) {
       const e = entries.get(api.key(side, type)) || entries.get(api.key(null, type));
@@ -78,6 +135,7 @@
       } catch (_) { return 0; }
     },
   };
+  if (root.setInterval) { const t = root.setInterval(() => api.trimHi(), 2000); if (t && t.unref) t.unref(); }
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.AtlasLoader = api;
   // ant46 bake-tool: the baked atlases in assets/atlas/ (tools/bake-atlas.js) load by default; a missing manifest or PNG leaves the painter

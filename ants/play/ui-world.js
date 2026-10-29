@@ -46,7 +46,11 @@
   // ---------- hp bars ----------
   // Ink outline, --panel backing, faction fill; at a third or less the fill turns amber (plus a lit end cap, so it is
   // not a hue-only cue). opts.chamfer cuts two corners like the HUD panels (nests, boss), opts.quarters adds ticks.
+  // ant70: bars scale with zoom, and at 8x they got huge. Past BAR_MAX_W / BAR_MAX_H screen px they stop growing (centred, bottom edge kept).
+  const BAR_MAX_W = 110, BAR_MAX_H = 11;
   function hpBar(ctx, x, y, w, h, frac, color, o = {}) {
+    if (w > BAR_MAX_W) { x += (w - BAR_MAX_W) / 2; w = BAR_MAX_W; }
+    if (h > BAR_MAX_H) { y += h - BAR_MAX_H; h = BAR_MAX_H; }
     frac = Math.max(0, Math.min(1, frac));
     const low = frac <= 1 / 3;
     if (o.chamfer && h >= 3) {
@@ -67,7 +71,7 @@
   // The small bar over an ant. Shown when hurt, or always when the ant is selected.
   function antBar(ctx, cx, cy, k, hp, color, selected) {
     if (hp >= 100 && !selected) return;
-    const w = Math.max(8, 14 * k), h = Math.max(2, 2.2 * k);
+    const w = Math.min(40, Math.max(8, 14 * k)), h = Math.min(5, Math.max(2, 2.2 * k));
     hpBar(ctx, cx - w / 2, cy - 14 * k, w, h, hp / 100, color);
   }
 

@@ -434,15 +434,21 @@ function stampAnt(A, cell, B, x, y, ang, k, dx, dy, sx = 1, sy = 1) {
   const cs = Math.cos(ang), sn = Math.sin(ang);
   ctx.setTransform(B.a * cs + B.c * sn, B.b * cs + B.d * sn, B.c * cs - B.a * sn, B.d * cs - B.b * sn, B.a * x + B.c * y + B.e, B.b * x + B.d * y + B.f);
   const G = RenderCfg.GAIT, rows = RenderCfg.ANTENNA * 2 + 1, col = cell % G, r2 = (cell - col) / G, row = r2 % rows, bin = (r2 - row) / rows;
-  const r = k / A.k;
-  const P = antPage(A, bin), srcY = (P.yoff || 0) + (A.png && A.png.rowMap ? A.png.rowMap[row] : row) * A.ch;
-  let ddx = dx - A.ox * r * sx, ddy = dy - A.oy * r * sy, dw = A.cw * r * sx, dh = A.ch * r * sy;
+  // ant71: close zoom stamps the lazily loaded 2x tier of the sheet (atlas-loader hi) when it is ready and carries this row; same cell, twice the pixels
+  let H = null;
+  if (A.png && A.png.screen && window.AtlasLoader && AtlasLoader.hi) {
+    if (A.hiAt !== Render.frameNo) { A.hiAt = Render.frameNo; A.hiS = AtlasLoader.hi(A.side, A.type, k * pixelRatio() / A.k); }
+    H = A.hiS && A.hiS.rowMap[row] >= 0 ? A.hiS : null;
+  }
+  const T = H || A, r = k / T.k;
+  const P = H ? null : antPage(A, bin), srcY = H ? (Math.round(bin * H.bins / RenderCfg.HEADINGS) % H.bins * H.rows + H.rowMap[row]) * H.ch : (P.yoff || 0) + (A.png && A.png.rowMap ? A.png.rowMap[row] : row) * A.ch;
+  let ddx = dx - T.ox * r * sx, ddy = dy - T.oy * r * sy, dw = T.cw * r * sx, dh = T.ch * r * sy;
   if (A.png && A.png.screen) { // ant64: the cell is a tilted-camera view already turned to its bin's screen heading: only the residual turn is applied
     const S = A.png, ja = Math.round(bin * S.bins / RenderCfg.HEADINGS) % S.bins; // the sheet row actually used (same pick as antPage)
     ctx.translate(dx, dy); ctx.scale(sx, sy); ctx.rotate(-ja * Math.PI * 2 / S.bins);
-    ddx = -A.ox * r; ddy = -A.oy * r; dw = A.cw * r; dh = A.ch * r;
+    ddx = -T.ox * r; ddy = -T.oy * r; dw = T.cw * r; dh = T.ch * r;
   }
-  ctx.drawImage(P.canvas, col * A.cw, srcY, A.cw, A.ch, ddx, ddy, dw, dh); // ant18: squash/stretch about the ant's centre
+  ctx.drawImage(H ? H.img : P.canvas, H ? Math.round(col * (H.gait - 1) / (G - 1)) * H.cw : col * A.cw, srcY, T.cw, T.ch, ddx, ddy, dw, dh); // ant18: squash/stretch about the ant's centre
 }
 
 const POSE = { sx: 1, sy: 1, fwd: 0, side: 0, lift: 0, kb: 0, jx: 0, jy: 0, edge: 0, edgeRim: 0, grow: 1, alpha: 1, emerge: 0, open: false, hx: 0, hy: 0 };
@@ -560,6 +566,7 @@ function drawWorld(now) {
   if (window.Perf) Perf.mark('shadows');
   const rocks = window.TerrainDraw ? TerrainDraw.rocks(curr) : [];
   if (window.TerrainDraw && TerrainDraw.frame) TerrainDraw.frame(toScreen, scale); // ant68: per-frame rock sprite lookups, once
+  const bakedRocks = window.TerrainDraw && TerrainDraw.bakeRocks ? TerrainDraw.bakeRocks(ctx, curr, { toScreen, scale, dpr: pixelRatio(), makeCanvas: Render.makeCanvas, viewW: innerWidth, viewH: innerHeight }) : null; // ant70: far rocks live in a cached layer
   const S = window.Structures; // ant16: structures.js, depth-sorted as kind 6
   const need = w.players.length + curr.food.length + ants.length + rocks.length + 2 + (S ? S.count() : 0);
   if (Render.keys.length < need) Render.keys = new Float64Array(need * 2);
@@ -574,7 +581,7 @@ function drawWorld(now) {
   for (let i = 0; i < ants.length; i++) put(toScreen(ants[i][3], ants[i][4]).y, 2, i);
   if (w.anteater) put(toScreen(w.anteater.x, w.anteater.y).y, 3, 0);
   if (w.beetle) put(toScreen(w.beetle.x, w.beetle.y).y, 4, 0);
-  for (let i = 0; i < rocks.length; i++) { const c = toScreen(rocks[i][0] + 0.5, rocks[i][1] + 0.5); if (onScreen(c)) put(c.y, 5, i); } // terrain-draw.js
+  for (let i = 0; i < rocks.length; i++) { const c = toScreen(rocks[i][0] + 0.5, rocks[i][1] + 0.5); if (onScreen(c) && !(bakedRocks && bakedRocks.has(rocks[i][1] * 4096 + rocks[i][0]))) put(c.y, 5, i); } // terrain-draw.js
   if (S) S.sortInto(put, 6); // ant16
   const sorted = K.subarray(0, n).sort();
   const PF = window.Perf && Perf.on ? Perf : null;

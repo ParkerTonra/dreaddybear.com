@@ -548,6 +548,88 @@
     ctx.drawImage(S.cv, c.x - S.ox * scale, c.y - S.oy * scale, S.w * scale, S.h * scale);
   }
 
+  // ---------- Baked rocks (ant70) ----------
+  // Zoomed out, a Huge board has 1000-1500 rocks; one drawImage each cost 6-8 ms a frame in Firefox. Below ROCK_BAKE_ON (tile scale) the
+  // rocks are painted once into a second cached layer (same bounds and density as the board layer, so it blits with the same crop) and
+  // render.js skips their sprites. The layer fills ROCK_BAKE_PER_FRAME ms at a time, back to front; rocks not yet painted keep drawing as
+  // sprites, so nothing pops. A dug rock repaints only its own box: clip, clear, repaint the rocks that touch it. Above ROCK_BAKE_OFF the
+  // sprites return (ants walk behind rocks there, so rocks must be depth-sorted with them).
+  const ROCK_BAKE_ON = 0.8, ROCK_BAKE_OFF = 0.9, ROCK_BAKE_MS = 4;
+  const R = { canvas: null, w: 0, h: 0, key: '', ver: -1, on: false, order: null, next: 0, baked: new Set(), rocksRef: null, info: null };
+  const rockId = r => r[1] * 4096 + r[0];
+  function bakeCanBe() { return !!doc && !(TOD[todName].tint && !root.TimeOfDay); }
+  function rockRect(info, c, pad) { // layer-pixel box of the rock whose tile centre is c (layer units)
+    const D = info.D;
+    return { x: Math.floor((c.x - info.minU - ROCK_BOX.L) * D) - pad, y: Math.floor((c.y - info.minV - ROCK_BOX.T) * D) - pad, w: Math.ceil((ROCK_BOX.L + ROCK_BOX.R) * D) + 2 * pad, h: Math.ceil((ROCK_BOX.T + ROCK_BOX.B) * D) + 2 * pad };
+  }
+  function bakeOne(g, info, P, r, flip) {
+    const c = P(r[0] + 0.5, r[1] + 0.5);
+    g.setTransform(info.D, 0, 0, info.D, -info.minU * info.D, -info.minV * info.D);
+    paintRock(g, c.x, c.y, 1, r[0], r[1], r[2], flip ? -1 : 1, 1 / info.D);
+  }
+  // Returns the Set of baked rock ids to skip in the depth sort, or null when rocks draw as sprites. Call once per frame after drawBoard().
+  function bakeRocks(ctx, state, env) {
+    const info = L.info, t = sync(state);
+    if (!info || !t || !L.canvas || !bakeCanBe()) { R.on = false; return null; }
+    const scale = env.scale, dpr = env.dpr || 1;
+    R.on = R.on ? scale < ROCK_BAKE_OFF : scale < ROCK_BAKE_ON;
+    if (!R.on || L.D < scale * dpr * 0.7) return null; // layer capped well below the screen density (huge maps): sprites stay crisper
+    const flip = info.flip, P = projector(info.map, flip);
+    const key = [state.seed, info.map, flip ? 1 : 0, todName, todVer, info.D.toFixed(3), L.w, L.h].join('|');
+    const first = R.key !== key || !R.canvas;
+    if (first) {
+      R.key = key; R.ver = t.ver; R.w = L.w; R.h = L.h; R.info = info; R.baked = new Set(); R.next = 0; R.rocksRef = t.rocks;
+      if (R.canvas && R.canvas.width === R.w && R.canvas.height === R.h) { const g0 = R.canvas.getContext('2d'); g0.setTransform(1, 0, 0, 1, 0, 0); g0.clearRect(0, 0, R.w, R.h); }
+      else R.canvas = (env.makeCanvas || makeCanvas)(R.w, R.h);
+      const sgn = flip ? -1 : 1; // back to front: smaller screen y first
+      R.order = t.rocks.slice().sort((a, b) => sgn * ((a[0] + a[1]) - (b[0] + b[1])));
+    }
+    const g = R.canvas.getContext('2d');
+    if (!first && R.ver !== t.ver) { // terrain changed (a rock dug out): repaint just the boxes of rocks that left
+      const cur = new Set(t.rocks.map(rockId)), gone = [];
+      for (const id of R.baked) if (!cur.has(id)) gone.push(id);
+      R.ver = t.ver; R.info = info;
+      const sgn = flip ? -1 : 1;
+      R.order = t.rocks.slice().sort((a, b) => sgn * ((a[0] + a[1]) - (b[0] + b[1])));
+      R.next = 0; // the order list shifted; painted rocks are skipped by id
+      for (const id of gone) {
+        R.baked.delete(id);
+        const x = id % 4096, y = (id / 4096) | 0, c = P(x + 0.5, y + 0.5), rc = rockRect(info, c, 2);
+        g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.beginPath(); g.rect(rc.x, rc.y, rc.w, rc.h); g.clip(); g.clearRect(rc.x, rc.y, rc.w, rc.h);
+        for (const r of R.order) {
+          if (!R.baked.has(rockId(r))) continue;
+          const c2 = P(r[0] + 0.5, r[1] + 0.5);
+          if (Math.abs(c2.x - c.x) > ROCK_BOX.L + ROCK_BOX.R + 4 || Math.abs(c2.y - c.y) > ROCK_BOX.T + ROCK_BOX.B + 4) continue;
+          bakeOne(g, info, P, r, flip);
+        }
+        g.restore();
+      }
+    }
+    // progressive fill, in y order, within a time budget (the first frames still draw the rest as sprites)
+    if (R.next < R.order.length) {
+      const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+      g.save();
+      let n = 0;
+      while (R.next < R.order.length) {
+        const r = R.order[R.next++];
+        if (R.baked.has(rockId(r))) continue;
+        bakeOne(g, info, P, r, flip); R.baked.add(rockId(r));
+        if ((++n & 7) === 0 && typeof performance !== 'undefined' && performance.now() - t0 > ROCK_BAKE_MS) break;
+      }
+      g.restore();
+    }
+    // blit with the board layer's crop
+    const m = info.map, toScreen = env.toScreen, o = toScreen(info.flip ? m : 0, info.flip ? m : 0);
+    const dx = o.x + info.minU * scale, dy = o.y + info.minV * scale, dw = R.w / info.D * scale, dh = R.h / info.D * scale;
+    const vw = env.viewW, vh = env.viewH, M = 12;
+    if (vw > 0 && vh > 0) {
+      const sx0 = Math.max(0, Math.floor((-M - dx) / dw * R.w) - 2), sx1 = Math.min(R.w, Math.ceil((vw + M - dx) / dw * R.w) + 2);
+      const sy0 = Math.max(0, Math.floor((-M - dy) / dh * R.h) - 2), sy1 = Math.min(R.h, Math.ceil((vh + M - dy) / dh * R.h) + 2);
+      if (sx1 > sx0 && sy1 > sy0) ctx.drawImage(R.canvas, sx0, sy0, sx1 - sx0, sy1 - sy0, dx + sx0 / R.w * dw, dy + sy0 / R.h * dh, (sx1 - sx0) / R.w * dw, (sy1 - sy0) / R.h * dh);
+    } else ctx.drawImage(R.canvas, dx, dy, dw, dh);
+    return R.baked;
+  }
+
   // ---------- Legacy / fallback API (also what the node test exercises) ----------
   function ground(ctx, toScreen, scale, state) { // mud only; the real board is drawBoard()
     const t = sync(state);
@@ -620,7 +702,7 @@
   }
 
   root.TerrainDraw = {
-    ground, items, at, rocks, rock, frame, digRings, drawBoard, buildTexture, layerBounds, paintLayer, projector, texelsPerTile, ROCK_BOX, paintRock, applyTint,
+    ground, items, at, rocks, rock, rockId, bakeRocks, frame, digRings, drawBoard, buildTexture, layerBounds, paintLayer, projector, texelsPerTile, ROCK_BOX, paintRock, applyTint,
     palette: PAL, TOD,
     tod: () => TOD[todName], setTod, overlay, emitters,
     ambient: () => !reduced(), // false in Reduced motion: ambient motion must stand still
