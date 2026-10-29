@@ -1767,7 +1767,7 @@ module.exports = ({ STATS, AGGRO, COMBAT: C }) => ({
 // Economy & foraging, installed onto Game.prototype by game.js. Balance constants (ECON) live in game.js.
 // - Workers pick piles by distance plus a penalty per colony-mate already heading there, so they spread out.
 // - Starting piles regrow slowly, and a rich pile in the map centre regrows fast, so the late game never starves.
-// - Two blue pellet piles sit on the anti-diagonal, each the same distance from one colony of each team.
+// - Blue pellet piles (pairs, count by match size: ECON.pelletPairs) sit on the anti-diagonal, each the same distance from one colony of each team.
 //   Workers bring pellets home one at a time; pellets (with food) pay for evolutions (research.js).
 // - Scavenging (ant32): every ant that dies leaves a crumb where it fell (SCAVENGE food by type, whatever it carried
 //   drops as before). Crumbs are plain piles workers pick like any other, nearby ones merge, and they rot, so the
@@ -1786,9 +1786,17 @@ module.exports = function installEconomy(Game, { STATS, ECON, DT, dist, clamp })
     for (const f of this.food) { f.max = f.amount; f.regen = ECON.pileRegrow; }
     this.addSpecialFood(M / 2, M / 2, ECON.centerStart, 'center', ECON.centerMax, ECON.centerRegrow);
     // The anti-diagonal is equidistant from both 1v1 nests; in 2v2 each pile is equidistant from one red and one blue colony.
-    const t = M * ECON.pelletSpot, regen = ECON.pelletRegrow * this.players.length / 2;
-    this.addSpecialFood(t, M - t, ECON.pelletStart, 'pellet', ECON.pelletMax, regen);
-    this.addSpecialFood(M - t, t, ECON.pelletStart, 'pellet', ECON.pelletMax, regen);
+    const regen = ECON.pelletRegrow * this.players.length / 2;
+    for (const s of this.pelletSpots()) {
+      this.addSpecialFood(M * s, M - M * s, ECON.pelletStart, 'pellet', ECON.pelletMax, regen);
+      this.addSpecialFood(M - M * s, M * s, ECON.pelletStart, 'pellet', ECON.pelletMax, regen);
+    }
+  };
+
+  // Fractions of the side for this match size's pellet pile pairs (ECON.pelletPairs by size, spots from ECON.pelletSpots).
+  P.pelletSpots = function () {
+    const n = Math.min(ECON.pelletPairs[this.size] ?? 1, ECON.pelletSpots.length);
+    return ECON.pelletSpots.slice(0, n);
   };
 
   P.addSpecialFood = function (x, y, amount, kind, max, regen) {
@@ -2297,7 +2305,9 @@ const COMBAT = { TARGET_LEASH: 4, DEFEND_RADIUS: 4.5, DEFEND_LEASH: 9, FOCUS_WEI
 const ECON = {
   pileRegrow: 0.12, // food/s each starting pile regrows, up to its starting size
   centerStart: 80, centerMax: 160, centerRegrow: 1.2, // contested rich pile in the map centre
-  pelletSpot: 0.25, pelletStart: 3, pelletMax: 5, pelletRegrow: 1 / 25, // 2 pellet piles; regrow scales with player count
+  pelletStart: 3, pelletMax: 5, pelletRegrow: 1 / 25, // regrow scales with player count
+  pelletSpots: [0.25, 0.12, 0.37], // ant76: where pellet pile pairs sit, as a fraction of the side along the anti-diagonal (x = s*M, y = M - s*M, and its mirror); first spot is the original pair
+  pelletPairs: { quick: 1, standard: 1, large: 1, huge: 3 }, // pairs of pellet piles per match size (2 piles each; scales with map area, never above pelletSpots.length)
   pelletCrew: 2, pelletPull: 6, // max workers per colony sent to one pellet pile, and how far they will detour for it
   claimPenalty: 1.5, overclaimPenalty: 6, pickNoise: 1, // workers spread across piles instead of crowding one
   rescueBelow: 10, rescueEvery: 10, // a colony with no workers and under rescueBelow food hatches a free worker every rescueEvery s

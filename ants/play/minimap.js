@@ -84,8 +84,15 @@
 
     for (const f of curr.food) { // f: [id, x, y, amount, kind] kind 1 pellets, 2 rich centre pile, 3 crumb (not shown)
       if (f[4] === 3) continue;
-      const r = f[4] === 1 ? 2.2 : Math.min(3.5, 1 + Math.sqrt(f[3]) / 4);
-      dot(at(f[1], f[2]), r, f[4] === 1 ? '#5ab0ff' : f[4] === 2 ? '#f0d86a' : '#a8e05e');
+      if (f[4] === 1) { // ant76: pellet piles are big, bright blue rings with a white core so they show on a Huge map
+        const c = at(f[1], f[2]);
+        g.beginPath(); g.arc(c.x, c.y, 6, 0, Math.PI * 2);
+        g.fillStyle = '#1e7bff'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#ffffff'; g.stroke();
+        g.beginPath(); g.arc(c.x, c.y, 2, 0, Math.PI * 2); g.fillStyle = '#bfe0ff'; g.fill();
+        continue;
+      }
+      const r = Math.min(3.5, 1 + Math.sqrt(f[3]) / 4);
+      dot(at(f[1], f[2]), r, f[4] === 2 ? '#f0d86a' : '#a8e05e');
     }
     if (root.Objectives) Objectives.drawMini(g, at, pulse); // ant16: aphid farms, spiders
     curr.players.forEach((p, i) => {
