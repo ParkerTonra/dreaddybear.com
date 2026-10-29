@@ -43,7 +43,7 @@ const Render = {
   ants: new Map(), // id -> { ang, walk, x, y, spd, f } smoothed per-ant motion
   seed: null, frameNo: 0, lastNow: 0,
   keys: new Float64Array(512),
-  stats: { groundPaints: 0, spritePaints: 0, atlasEvicts: 0 },
+  stats: { groundPaints: 0, spritePaints: 0, atlasEvicts: 0, ms: { nest: 0, food: 0, cell: 0 } }, // ms: time spent baking, by kind (ant78 zoom-lag attribution)
 };
 
 // Sprite resolution: steps of 2^(1/8) (~9%) so a zooming camera repaints sprites rarely, never every frame.
@@ -207,13 +207,14 @@ function nestSprite(p, side) {
   let S = Render.nests.get(side);
   if (S && S.key === key && (S.q === q || Render.rebakes <= 0)) return S;
   Render.rebakes--;
+  const tb = performance.now();
   const nb = window.WorldArt ? WorldArt.NEST_BOX : { L: 54, R: 56, T: 56, B: 30 }; // ant18/ground: room for the long shadow
   const L = Math.ceil(nb.L * q) + 2, R = Math.ceil(nb.R * q) + 2, T = Math.ceil(nb.T * q) + 2, B = Math.ceil(nb.B * q) + 2;
   if (S) S.canvas.width = 0; // ant75: the old bake goes now, not at the next GC
   S = { key, q, canvas: Render.makeCanvas(L + R, T + B), ox: L / q, oy: T / q, w: (L + R) / q, h: (T + B) / q };
   paintNest(S.canvas.getContext('2d'), { x: L, y: T }, q, p, side);
   Render.nests.set(side, S);
-  Render.stats.spritePaints++;
+  Render.stats.spritePaints++; Render.stats.ms.nest += performance.now() - tb;
   return S;
 }
 
@@ -264,6 +265,7 @@ function drawFood(f) {
   let S = Render.foods.get(f[0]);
   if (!S || S.amt !== f[3] || (S.q !== q && Render.rebakes > 0)) {
     if (S && S.amt === f[3]) Render.rebakes--;
+    const tb = performance.now();
     const half = Math.ceil((window.WorldArt ? 36 : 30) * q) + 2;
     const same = S && S.canvas.width === half * 2, canvas = same ? S.canvas : Render.makeCanvas(half * 2, half * 2);
     if (S && !same) S.canvas.width = 0; // ant75
@@ -272,7 +274,7 @@ function drawFood(f) {
     paintFood(g, { x: half, y: half }, q, f);
     S = { amt: f[3], q, canvas, half: half / q };
     Render.foods.set(f[0], S);
-    Render.stats.spritePaints++;
+    Render.stats.spritePaints++; Render.stats.ms.food += performance.now() - tb;
   }
   const h = S.half * scale;
   ctx.drawImage(S.canvas, c.x - h, c.y - h, h * 2, h * 2);
@@ -355,6 +357,7 @@ function antCell(A, col, row, bin = 0) {
   const i = row * G + col;
   if (!P.painted[i]) {
     P.painted[i] = 1; A.n = (A.n || 0) + 1;
+    const tb = performance.now();
     const g = P.g, dead = row === RenderCfg.ANTENNA * 2;
     g.setTransform(1, 0, 0, 1, col * A.cw + A.ox, row * A.ch + A.oy);
     g.save(); g.beginPath(); g.rect(-A.ox, -A.oy, A.cw, A.ch); g.clip(); // a cell never bleeds into its neighbour
@@ -364,7 +367,7 @@ function antCell(A, col, row, bin = 0) {
     paintAntBody(g, A.k, A.side, A.type, swing, wig, !dead && row >= RenderCfg.ANTENNA, dead, bin);
     g.restore();
     g.setTransform(1, 0, 0, 1, 0, 0);
-    Render.stats.spritePaints++;
+    Render.stats.spritePaints++; Render.stats.ms.cell += performance.now() - tb;
   }
   return (bin * rows + row) * G + col;
 }

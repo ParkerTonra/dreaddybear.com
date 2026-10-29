@@ -405,7 +405,14 @@
   // Board layer knobs. SETTLE_MS / MAX_BLUR: see drawBoard. A density step that repaints the layer (ant77) paints into a second canvas a strip at a
   // time while the old layer keeps being blitted scaled: STRIP_PX pixels of layer per strip, at most STRIP_MS of painting per frame (always one strip),
   // CULL_PAD view units of slack around a strip for things that overhang their anchor (tufts, rock shadows).
-  const LAYER = { MAX_PX: 4096 * 4096, SETTLE_MS: 250, MAX_BLUR: 1.7, STRIP_PX: 200000, STRIP_MS: 5, CULL_PAD: 40 };
+  // ant78 knobs, same table. Rock sprites: ROCK_SETTLE_MS a density must hold before sprites re-bake, ROCK_REBAKES sprites re-baked per frame.
+  // Baked rock layer (ant70): ROCK_BAKE_ON / ROCK_BAKE_OFF tile scale below which rocks live in the layer (hysteresis), ROCK_BAKE_MS painting per frame
+  // (a layer for a new density is baked in the background into a second canvas while the old one is shown; ROCK_SPREAD false = old clear-and-refill).
+  // A dug rock repaints only the layer rows it touches (not the whole layer): DIG_MAX_TILES changed tiles at most (more = full repaint), DIG_PAD_TILES
+  // of texture reach round them, DIG_PAD_V view units of slack above and below (tufts above a tile, rock shadow tails below).
+  const LAYER = { MAX_PX: 4096 * 4096, SETTLE_MS: 250, MAX_BLUR: 1.7, STRIP_PX: 200000, STRIP_MS: 5, CULL_PAD: 40,
+    ROCK_SETTLE_MS: 200, ROCK_REBAKES: 4, ROCK_BAKE_ON: 0.8, ROCK_BAKE_OFF: 0.9, ROCK_BAKE_MS: 4, ROCK_SPREAD: true,
+    DIG_MAX_TILES: 12, DIG_PAD_TILES: 2, DIG_PAD_V: 64, DIG_BAND: true };
   const MAX_LAYER_PX = LAYER.MAX_PX, SETTLE_MS = LAYER.SETTLE_MS, MAX_BLUR = LAYER.MAX_BLUR;
   let job = null; // a repaint in progress: { key, base, D, canvas, cw, ch, B, info, next (next layer row), rows (rows per strip), P, t, tex }
   const stripRows = cw => Math.max(16, Math.ceil(LAYER.STRIP_PX / cw));
@@ -417,9 +424,26 @@
     g.restore(); g.setTransform(1, 0, 0, 1, 0, 0);
   }
   function dropJob() { if (job) { releaseCanvas(job.canvas); job = null; } }
+  const digStats = { bands: 0, rows: 0, last: null }; // dug-rock repaints done: count, layer rows repainted, the last band { y0, y1 }
+  let djob = null; // a dug-rock band repaint in progress (ant78): { key, next, end (layer rows), ... }
+  function dropDig() { djob = null; }
+  // The layer rows a change to tiles (old cls -> new cls) can touch, or null when it is not a small change. Texture reaches DIG_PAD_TILES tiles round a
+  // changed tile; tufts stand above their tile and a rock's shadow tail runs down-right, so DIG_PAD_V covers both.
+  function digBand(oldCls, cls, m, P, B, D, ch, rows) {
+    if (!oldCls || oldCls.length !== cls.length) return null;
+    let x0 = m, y0 = m, x1 = -1, y1 = -1, n = 0;
+    for (let i = 0; i < cls.length; i++) if (oldCls[i] !== cls[i]) { n++; const x = i % m, y = (i / m) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (!n || n > LAYER.DIG_MAX_TILES) return null;
+    const pt = LAYER.DIG_PAD_TILES;
+    x0 = Math.max(0, x0 - pt); y0 = Math.max(0, y0 - pt); x1 = Math.min(m, x1 + 1 + pt); y1 = Math.min(m, y1 + 1 + pt);
+    const vs = [P(x0, y0).y, P(x1, y0).y, P(x0, y1).y, P(x1, y1).y];
+    const lo = Math.floor((Math.min(...vs) - LAYER.DIG_PAD_V - B.minV) * D), hi = Math.ceil((Math.max(...vs) + LAYER.DIG_PAD_V + 40 - B.minV) * D);
+    const a = Math.max(0, Math.floor(lo / rows) * rows), b = Math.min(ch, Math.ceil(hi / rows) * rows); // on the strip grid, so the strips are the ones a whole-layer repaint would paint
+    return b > a ? { y0: a, y1: b } : null;
+  }
   function finishLayer(j, state, env) { // the new layer becomes the live one
     releaseCanvas(L.canvas);
-    L.key = j.key; L.base = j.base; L.canvas = j.canvas; L.w = j.cw; L.h = j.ch; L.D = j.D;
+    L.key = j.key; L.base = j.base; L.look = j.look; L.cls = j.t ? j.t.cls : null; L.canvas = j.canvas; L.w = j.cw; L.h = j.ch; L.D = j.D;
     L.info = j.info;
     if (env.stats) env.stats.groundPaints++;
     for (const cb of rebuildCbs) { try { cb(L.info); } catch (e) { /* hooks never break the frame */ } }
@@ -443,11 +467,37 @@
     if (D !== L.want) { L.want = D; L.wantAt = now; }
     const defer = L.key !== key && L.canvas && L.base === base && now - L.wantAt < SETTLE_MS && D / L.D < MAX_BLUR;
     if (job && job.key !== key) dropJob(); // the wanted layer changed again while one was painting
-    if (L.key !== key && !defer) {
+    // ant78: a dug rock changes a few tiles. Repaint only the layer rows they touch (into a band canvas, a strip or two per frame, then one blit into the
+    // live layer) instead of the whole 200-340 ms layer. It repaints at the layer's own density; a density step that is also due follows afterwards.
+    const look = [state.seed, m, flip ? 1 : 0, nestKey, todName, todVer].join('|');
+    let digging = false;
+    if (LAYER.DIG_BAND && L.canvas && L.base !== base && L.look === look && t && L.cls) {
+      const dkey = base + '|' + L.D.toFixed(3);
+      if (djob && djob.key !== dkey) dropDig(); // dug again mid-repaint: restart with the union of the changes
+      if (!djob) {
+        const P = projector(m, flip), band = digBand(L.cls, t.cls, m, P, B, L.D, L.h, stripRows(L.w));
+        if (band) djob = { key: dkey, base, look, D: L.D, B, cw: L.w, ch: L.h, y0: band.y0, next: band.y0, end: band.y1, rows: stripRows(L.w), P, t, tex: texture(t, state) };
+      }
+      if (djob) {
+        digging = true;
+        const g = L.canvas.getContext('2d'), t0 = performance.now();
+        do { // each strip is cleared and repainted within one frame, so the screen never shows a cleared row
+          const y1 = Math.min(djob.end, djob.next + djob.rows); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, djob.next, L.w, y1 - djob.next);
+          paintStrip(g, djob, state, djob.next, y1); djob.next = y1;
+        } while (djob.next < djob.end && performance.now() - t0 < LAYER.STRIP_MS);
+        if (djob.next >= djob.end) {
+          const j = djob; djob = null; digStats.bands++; digStats.rows += j.end - j.y0; digStats.last = { y0: j.y0, y1: j.end };
+          L.key = j.key; L.base = j.base; L.cls = j.t.cls; digging = false;
+          if (env.stats) env.stats.groundPaints++;
+          for (const cb of rebuildCbs) { try { cb(L.info); } catch (e) { /* hooks never break the frame */ } }
+        }
+      }
+    } else if (djob) dropDig();
+    if (L.key !== key && !defer && !digging) {
       const cw = Math.ceil(w1 * D), ch = Math.ceil(h1 * D);
       const info = { minU: B.minU, minV: B.minV, w: w1, h: h1, D, flip, map: m };
       if (L.canvas && L.base === base) { // same board, new density: paint a strip or two per frame, keep blitting the old layer meanwhile (ant77)
-        const tj = performance.now(); if (!job) job = { key, base, D, canvas: (env.makeCanvas || makeCanvas)(cw, ch), cw, ch, B, info, next: 0, rows: stripRows(cw), P: projector(m, flip), t, tex: texture(t, state) };
+        const tj = performance.now(); if (!job) job = { key, base, look, D, canvas: (env.makeCanvas || makeCanvas)(cw, ch), cw, ch, B, info, next: 0, rows: stripRows(cw), P: projector(m, flip), t, tex: texture(t, state) };
         const g = job.canvas.getContext('2d'), t0 = performance.now();
         if (LAYER.trace) LAYER.trace.push(['setup', +(t0 - tj).toFixed(1)]);
         do {
@@ -465,7 +515,7 @@
         g.setTransform(D, 0, 0, D, -B.minU * D, -B.minV * D);
         paintLayer(g, projector(m, flip), state, t, texture(t, state), D, state.seed);
         g.setTransform(1, 0, 0, 1, 0, 0);
-        L.key = key; L.base = base; L.canvas = canvas; L.w = cw; L.h = ch; L.D = D; L.info = info;
+        L.key = key; L.base = base; L.look = look; L.cls = t ? t.cls : null; L.canvas = canvas; L.w = cw; L.h = ch; L.D = D; L.info = info;
         if (env.stats) env.stats.groundPaints++;
         for (const cb of rebuildCbs) { try { cb(L.info); } catch (e) { /* hooks never break the frame */ } }
       }
@@ -554,8 +604,7 @@
   // Rock sprites are painted at the sprite density q. A zoom step used to clear them all, so every rock in view was re-created
   // (a new canvas each) in the one frame after each step: the 25-50 ms hitch while scroll-zooming. Now an older-density sprite
   // is drawn scaled until the density has held ROCK_SETTLE_MS, then rocks re-bake ROCK_REBAKES per frame (rocks() resets it).
-  const ROCK_SETTLE_MS = 200, ROCK_REBAKES = 4;
-  let rockLook = '', rockQ = 0, rockQAt = 0, rockLeft = ROCK_REBAKES;
+  let rockLook = '', rockQ = 0, rockQAt = 0, rockLeft = LAYER.ROCK_REBAKES;
   // ant68: with ~1000 rocks in view the per-rock flip / density / look-key work (two toScreen calls, a log2, a template string, a clock read)
   // was a few percent of the frame. render.js drawWorld calls frame() once per frame and clears it after the rock loop.
   let FR = null;
@@ -572,7 +621,7 @@
     if (q !== rockQ) { rockQ = q; rockQAt = now; }
     const id = y * 4096 + x;
     let S = rockSprites.get(id);
-    if (S && (S.q === q || now - rockQAt < ROCK_SETTLE_MS || rockLeft <= 0)) return S; // current, or a stand-in at the old density
+    if (S && (S.q === q || now - rockQAt < LAYER.ROCK_SETTLE_MS || rockLeft <= 0)) return S; // current, or a stand-in at the old density
     if (S) rockLeft--;
     const Lp = Math.ceil(ROCK_BOX.L * q) + 2, Tp = Math.ceil(ROCK_BOX.T * q) + 2, w = Lp + Math.ceil(ROCK_BOX.R * q) + 2, h = Tp + Math.ceil(ROCK_BOX.B * q) + 2;
     const cv = makeCanvas(w, h), g = cv.getContext('2d');
@@ -600,8 +649,7 @@
   // render.js skips their sprites. The layer fills ROCK_BAKE_PER_FRAME ms at a time, back to front; rocks not yet painted keep drawing as
   // sprites, so nothing pops. A dug rock repaints only its own box: clip, clear, repaint the rocks that touch it. Above ROCK_BAKE_OFF the
   // sprites return (ants walk behind rocks there, so rocks must be depth-sorted with them).
-  const ROCK_BAKE_ON = 0.8, ROCK_BAKE_OFF = 0.9, ROCK_BAKE_MS = 4;
-  const R = { canvas: null, w: 0, h: 0, key: '', ver: -1, on: false, order: null, next: 0, baked: new Set(), rocksRef: null, info: null };
+  const R = { canvas: null, job: null, look: '', w: 0, h: 0, key: '', ver: -1, on: false, order: null, next: 0, baked: new Set(), rocksRef: null, info: null };
   const rockId = r => r[1] * 4096 + r[0];
   function bakeCanBe() { return !!doc && !(TOD[todName].tint && !root.TimeOfDay); }
   function rockRect(info, c, pad) { // layer-pixel box of the rock whose tile centre is c (layer units)
@@ -614,65 +662,82 @@
     paintRock(g, c.x, c.y, 1, r[0], r[1], r[2], flip ? -1 : 1, 1 / info.D);
   }
   // Returns the Set of baked rock ids to skip in the depth sort, or null when rocks draw as sprites. Call once per frame after drawBoard().
+  // ant78: a new density (the board layer swapped) no longer clears the live rock layer and re-fills it from nothing. The new layer bakes into a
+  // second canvas (R.job) at ROCK_BAKE_MS per frame while the old one keeps being blitted (scaled, like the board layer's stand-in), then swaps in.
+  // Anything else that invalidates the look (new game, flip, time of day) still starts from nothing: there is no valid layer to show.
+  function rockLayerBlit(ctx, env, info, canvas, w, h) { // blit with the board layer's crop
+    const m = info.map, scale = env.scale, toScreen = env.toScreen, o = toScreen(info.flip ? m : 0, info.flip ? m : 0);
+    const dx = o.x + info.minU * scale, dy = o.y + info.minV * scale, dw = w / info.D * scale, dh = h / info.D * scale;
+    const vw = env.viewW, vh = env.viewH, M = 12;
+    if (vw > 0 && vh > 0) {
+      const sx0 = Math.max(0, Math.floor((-M - dx) / dw * w) - 2), sx1 = Math.min(w, Math.ceil((vw + M - dx) / dw * w) + 2);
+      const sy0 = Math.max(0, Math.floor((-M - dy) / dh * h) - 2), sy1 = Math.min(h, Math.ceil((vh + M - dy) / dh * h) + 2);
+      if (sx1 > sx0 && sy1 > sy0) ctx.drawImage(canvas, sx0, sy0, sx1 - sx0, sy1 - sy0, dx + sx0 / w * dw, dy + sy0 / h * dh, (sx1 - sx0) / w * dw, (sy1 - sy0) / h * dh);
+    } else ctx.drawImage(canvas, dx, dy, dw, dh);
+  }
+  const rockOrder = (t, flip) => { const sgn = flip ? -1 : 1; return t.rocks.slice().sort((a, b) => sgn * ((a[0] + a[1]) - (b[0] + b[1]))); }; // back to front: smaller screen y first
+  function dropRockJob() { if (R.job) { releaseCanvas(R.job.canvas); R.job = null; } }
   function bakeRocks(ctx, state, env) {
     const info = L.info, t = sync(state);
     if (!info || !t || !L.canvas || !bakeCanBe()) { R.on = false; return null; }
     const scale = env.scale, dpr = env.dpr || 1;
-    R.on = R.on ? scale < ROCK_BAKE_OFF : scale < ROCK_BAKE_ON;
-    if (!R.on || L.D < scale * dpr * 0.7) return null; // layer capped well below the screen density (huge maps): sprites stay crisper
+    R.on = R.on ? scale < LAYER.ROCK_BAKE_OFF : scale < LAYER.ROCK_BAKE_ON;
+    if (!R.on || L.D < scale * dpr * 0.7) { dropRockJob(); return null; } // layer capped well below the screen density (huge maps): sprites stay crisper
     const flip = info.flip, P = projector(info.map, flip);
-    const key = [state.seed, info.map, flip ? 1 : 0, todName, todVer, info.D.toFixed(3), L.w, L.h].join('|');
-    const first = R.key !== key || !R.canvas;
-    if (first) {
-      R.key = key; R.ver = t.ver; R.w = L.w; R.h = L.h; R.info = info; R.baked = new Set(); R.next = 0; R.rocksRef = t.rocks;
+    const look = [state.seed, info.map, flip ? 1 : 0, todName, todVer].join('|');
+    const key = look + '|' + [info.D.toFixed(3), L.w, L.h].join('|');
+    const live = R.canvas && R.look === look; // a layer for this look (maybe at an older density) to keep showing
+    if (R.key !== key && !(R.job && R.job.key === key) && !(LAYER.ROCK_SPREAD && live && R.baked.size)) { // nothing valid to show meanwhile: all from nothing
+      dropRockJob();
+      R.key = key; R.look = look; R.ver = t.ver; R.w = L.w; R.h = L.h; R.info = info; R.baked = new Set(); R.next = 0; R.rocksRef = t.rocks;
       if (R.canvas && R.canvas.width === R.w && R.canvas.height === R.h) { const g0 = R.canvas.getContext('2d'); g0.setTransform(1, 0, 0, 1, 0, 0); g0.clearRect(0, 0, R.w, R.h); }
       else { releaseCanvas(R.canvas); R.canvas = (env.makeCanvas || makeCanvas)(R.w, R.h); }
-      const sgn = flip ? -1 : 1; // back to front: smaller screen y first
-      R.order = t.rocks.slice().sort((a, b) => sgn * ((a[0] + a[1]) - (b[0] + b[1])));
+      R.order = rockOrder(t, flip);
+    } else if (R.key !== key && !(R.job && R.job.key === key)) { // a new density: bake it on the side
+      dropRockJob();
+      R.job = { key, look, ver: t.ver, w: L.w, h: L.h, info, baked: new Set(), next: 0, order: rockOrder(t, flip), canvas: (env.makeCanvas || makeCanvas)(L.w, L.h) };
     }
-    const g = R.canvas.getContext('2d');
-    if (!first && R.ver !== t.ver) { // terrain changed (a rock dug out): repaint just the boxes of rocks that left
-      const cur = new Set(t.rocks.map(rockId)), gone = [];
+    if (!R.job || R.job.look !== look) dropRockJob();
+    if (R.ver !== t.ver) { // terrain changed (a rock dug out): repaint just the boxes of rocks that left
+      const g = R.canvas.getContext('2d'), cur = new Set(t.rocks.map(rockId)), gone = [], ri = R.info;
       for (const id of R.baked) if (!cur.has(id)) gone.push(id);
-      R.ver = t.ver; R.info = info;
-      const sgn = flip ? -1 : 1;
-      R.order = t.rocks.slice().sort((a, b) => sgn * ((a[0] + a[1]) - (b[0] + b[1])));
+      R.ver = t.ver; R.order = rockOrder(t, flip);
+      if (R.job) dropRockJob(); // its rock list is stale: restart it from the new list
       R.next = 0; // the order list shifted; painted rocks are skipped by id
       for (const id of gone) {
         R.baked.delete(id);
-        const x = id % 4096, y = (id / 4096) | 0, c = P(x + 0.5, y + 0.5), rc = rockRect(info, c, 2);
+        const x = id % 4096, y = (id / 4096) | 0, c = P(x + 0.5, y + 0.5), rc = rockRect(ri, c, 2);
         g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.beginPath(); g.rect(rc.x, rc.y, rc.w, rc.h); g.clip(); g.clearRect(rc.x, rc.y, rc.w, rc.h);
         for (const r of R.order) {
           if (!R.baked.has(rockId(r))) continue;
           const c2 = P(r[0] + 0.5, r[1] + 0.5);
           if (Math.abs(c2.x - c.x) > ROCK_BOX.L + ROCK_BOX.R + 4 || Math.abs(c2.y - c.y) > ROCK_BOX.T + ROCK_BOX.B + 4) continue;
-          bakeOne(g, info, P, r, flip);
+          bakeOne(g, ri, P, r, flip);
         }
         g.restore();
       }
+      if (R.key !== key && !R.job && LAYER.ROCK_SPREAD && live) R.job = { key, look, ver: t.ver, w: L.w, h: L.h, info, baked: new Set(), next: 0, order: R.order, canvas: (env.makeCanvas || makeCanvas)(L.w, L.h) };
     }
-    // progressive fill, in y order, within a time budget (the first frames still draw the rest as sprites)
-    if (R.next < R.order.length) {
+    // progressive fill, in y order, within a time budget (the first frames still draw the rest as sprites). The job, when there is one, gets the budget.
+    const F = R.job || R, g = (R.job ? R.job.canvas : R.canvas).getContext('2d');
+    if (F.next < F.order.length) {
       const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
       g.save();
       let n = 0;
-      while (R.next < R.order.length) {
-        const r = R.order[R.next++];
-        if (R.baked.has(rockId(r))) continue;
-        bakeOne(g, info, P, r, flip); R.baked.add(rockId(r));
-        if ((++n & 7) === 0 && typeof performance !== 'undefined' && performance.now() - t0 > ROCK_BAKE_MS) break;
+      while (F.next < F.order.length) {
+        const r = F.order[F.next++];
+        if (F.baked.has(rockId(r))) continue;
+        bakeOne(g, F.info || info, P, r, flip); F.baked.add(rockId(r));
+        if ((++n & 7) === 0 && typeof performance !== 'undefined' && performance.now() - t0 > LAYER.ROCK_BAKE_MS) break;
       }
       g.restore();
     }
-    // blit with the board layer's crop
-    const m = info.map, toScreen = env.toScreen, o = toScreen(info.flip ? m : 0, info.flip ? m : 0);
-    const dx = o.x + info.minU * scale, dy = o.y + info.minV * scale, dw = R.w / info.D * scale, dh = R.h / info.D * scale;
-    const vw = env.viewW, vh = env.viewH, M = 12;
-    if (vw > 0 && vh > 0) {
-      const sx0 = Math.max(0, Math.floor((-M - dx) / dw * R.w) - 2), sx1 = Math.min(R.w, Math.ceil((vw + M - dx) / dw * R.w) + 2);
-      const sy0 = Math.max(0, Math.floor((-M - dy) / dh * R.h) - 2), sy1 = Math.min(R.h, Math.ceil((vh + M - dy) / dh * R.h) + 2);
-      if (sx1 > sx0 && sy1 > sy0) ctx.drawImage(R.canvas, sx0, sy0, sx1 - sx0, sy1 - sy0, dx + sx0 / R.w * dw, dy + sy0 / R.h * dh, (sx1 - sx0) / R.w * dw, (sy1 - sy0) / R.h * dh);
-    } else ctx.drawImage(R.canvas, dx, dy, dw, dh);
+    if (R.job && R.job.next >= R.job.order.length) { // every rock is in the new layer: swap
+      const j = R.job; R.job = null;
+      releaseCanvas(R.canvas);
+      R.canvas = j.canvas; R.key = j.key; R.look = j.look; R.ver = j.ver; R.w = j.w; R.h = j.h; R.info = j.info; R.baked = j.baked; R.order = j.order; R.next = j.next; R.rocksRef = null;
+    }
+    rockLayerBlit(ctx, env, R.info, R.canvas, R.w, R.h);
     return R.baked;
   }
 
@@ -702,7 +767,7 @@
   }
 
   // render.js: the rock list ([x, y, n] per rock tile) for its packed depth sort, and one rock's draw.
-  function rocks(state) { rockLeft = ROCK_REBAKES; const t = sync(state); return t ? t.rocks : []; }
+  function rocks(state) { rockLeft = LAYER.ROCK_REBAKES; const t = sync(state); return t ? t.rocks : []; }
   function rock(ctx, toScreen, scale, r) { drawRock(ctx, toScreen, scale, r[0], r[1], r[2]); }
 
   // ant33: dig progress. A ring on the ground round each rock tile being chewed out (public: the enemy sees it and can come
@@ -748,7 +813,7 @@
   }
 
   root.TerrainDraw = {
-    ground, items, at, rocks, rock, rockId, bakeRocks, frame, digRings, drawBoard, layerCfg: LAYER, layerPending: () => !!job, buildTexture, layerBounds, paintLayer, projector, texelsPerTile, ROCK_BOX, paintRock, applyTint,
+    ground, items, at, rocks, rock, rockId, bakeRocks, frame, digRings, drawBoard, layerCfg: LAYER, digStats, layerPending: () => !!job || !!djob, buildTexture, layerBounds, paintLayer, projector, texelsPerTile, ROCK_BOX, paintRock, applyTint,
     palette: PAL, TOD,
     tod: () => TOD[todName], setTod, overlay, emitters,
     ambient: () => !reduced(), // false in Reduced motion: ambient motion must stand still
