@@ -315,8 +315,13 @@
   }
   const rockHeight = n => 15 + n * 13;
 
-  function paintLayer(g, P, state, t, tex, D, seed) {
+  // strip (optional): { v0, v1 } view-space rows to paint, the caller has clipped the context to the same pixel rows. Everything that cannot touch the
+  // strip is skipped, so a repaint can be spread over several frames (ant77) and the strips together equal one full paint.
+  function paintLayer(g, P, state, t, tex, D, seed, strip) {
     const m = state.map, nests = state.players || [];
+    const lo = strip ? strip.v0 - LAYER.CULL_PAD : -Infinity, hi = strip ? strip.v1 + LAYER.CULL_PAD : Infinity;
+    const oy0 = P(0, 0).y, dyx = P(1, 0).y - oy0, dyy = P(0, 1).y - oy0; // view y of a tile corner is linear in (x, y)
+    const tileOut = (x, y) => { const v = oy0 + dyx * x + dyy * y; return v < lo - 16 || v > hi + 16; };
     paintEdge(g, P, m, seed, D);
     // ground texture, drawn through the isometric affine
     const o = P(0, 0), ax = P(1, 0), ay = P(0, 1);
@@ -335,6 +340,7 @@
     const seg = (x0, y0, x1, y1, path) => { const a = P(x0, y0), b = P(x1, y1); path.moveTo(a.x, a.y); path.lineTo(b.x, b.y); };
     g.beginPath();
     for (let i = 1; i < m; i++) for (let k = 0; k < m; k++) {
+      if (strip && tileOut(i, k) && tileOut(k, i)) continue;
       if (hash(i, k, seed + 21) > 0.2) seg(i, k, i, k + 1, g);
       if (hash(k, i, seed + 22) > 0.2) seg(k, i, k + 1, i, g);
     }
@@ -346,6 +352,7 @@
     const items = [];
     for (let y = 0; y < m; y++) for (let x = 0; x < m; x++) {
       if (cls && cls[y * m + x]) continue;
+      if (strip && tileOut(x, y)) continue;
       if (nearNest(x, y)) continue;
       const n = hash(x, y, seed), n2 = hash(x * 3 + 1, y * 7 + 2, seed + 5);
       const jx = hash(x, y, seed + 31) * 0.5 + 0.25, jy = hash(x, y, seed + 32) * 0.5 + 0.25;
@@ -364,6 +371,7 @@
         g.fillStyle = `rgba(6,3,6,${pass[1]})`;
         g.beginPath();
         for (const [x, y, n] of t.rocks) {
+          if (strip && (oy0 + dyx * x + dyy * y > hi + 40 || oy0 + dyx * x + dyy * y < lo - 40 - rockHeight(n) * 1.7 * dir.y)) continue; // shadow tail runs down-right
           const h = rockHeight(n), len = h * 1.7 * pass[0], b = rockBase(x, y).map(([wx, wy]) => P(wx, wy));
           for (let s = 0; s <= 6; s++) {
             const k = len * s / 6;
@@ -394,8 +402,28 @@
 
   // ---------- The board layer ----------
   const L = { key: '', base: '', canvas: null, w: 0, h: 0, D: 1, info: null, want: 0, wantAt: 0 };
-  const MAX_LAYER_PX = 4096 * 4096;
-  const SETTLE_MS = 250, MAX_BLUR = 1.7; // see drawBoard
+  // Board layer knobs. SETTLE_MS / MAX_BLUR: see drawBoard. A density step that repaints the layer (ant77) paints into a second canvas a strip at a
+  // time while the old layer keeps being blitted scaled: STRIP_PX pixels of layer per strip, at most STRIP_MS of painting per frame (always one strip),
+  // CULL_PAD view units of slack around a strip for things that overhang their anchor (tufts, rock shadows).
+  const LAYER = { MAX_PX: 4096 * 4096, SETTLE_MS: 250, MAX_BLUR: 1.7, STRIP_PX: 200000, STRIP_MS: 5, CULL_PAD: 40 };
+  const MAX_LAYER_PX = LAYER.MAX_PX, SETTLE_MS = LAYER.SETTLE_MS, MAX_BLUR = LAYER.MAX_BLUR;
+  let job = null; // a repaint in progress: { key, base, D, canvas, cw, ch, B, info, next (next layer row), rows (rows per strip), P, t, tex }
+  const stripRows = cw => Math.max(16, Math.ceil(LAYER.STRIP_PX / cw));
+  function paintStrip(g, j, state, y0, y1) {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.save(); g.beginPath(); g.rect(0, y0, j.cw, y1 - y0); g.clip();
+    g.setTransform(j.D, 0, 0, j.D, -j.B.minU * j.D, -j.B.minV * j.D);
+    paintLayer(g, j.P, state, j.t, j.tex, j.D, state.seed, y0 === 0 && y1 >= j.ch ? null : { v0: j.B.minV + y0 / j.D, v1: j.B.minV + y1 / j.D });
+    g.restore(); g.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  function dropJob() { if (job) { releaseCanvas(job.canvas); job = null; } }
+  function finishLayer(j, state, env) { // the new layer becomes the live one
+    releaseCanvas(L.canvas);
+    L.key = j.key; L.base = j.base; L.canvas = j.canvas; L.w = j.cw; L.h = j.ch; L.D = j.D;
+    L.info = j.info;
+    if (env.stats) env.stats.groundPaints++;
+    for (const cb of rebuildCbs) { try { cb(L.info); } catch (e) { /* hooks never break the frame */ } }
+  }
 
   // render.js drawGround(): blit the cached board. Returns false when this module cannot (no canvas): caller falls back.
   function drawBoard(ctx, state, env) {
@@ -414,19 +442,33 @@
     const now = typeof performance !== 'undefined' ? performance.now() : 0;
     if (D !== L.want) { L.want = D; L.wantAt = now; }
     const defer = L.key !== key && L.canvas && L.base === base && now - L.wantAt < SETTLE_MS && D / L.D < MAX_BLUR;
+    if (job && job.key !== key) dropJob(); // the wanted layer changed again while one was painting
     if (L.key !== key && !defer) {
       const cw = Math.ceil(w1 * D), ch = Math.ceil(h1 * D);
-      const reuse = L.canvas && L.canvas.width === cw && L.canvas.height === ch, canvas = reuse ? L.canvas : (env.makeCanvas || makeCanvas)(cw, ch);
-      if (!reuse) releaseCanvas(L.canvas);
-      const g = canvas.getContext('2d');
-      g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cw, ch);
-      g.setTransform(D, 0, 0, D, -B.minU * D, -B.minV * D);
-      paintLayer(g, projector(m, flip), state, t, texture(t, state), D, state.seed);
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      L.key = key; L.base = base; L.canvas = canvas; L.w = cw; L.h = ch; L.D = D;
-      L.info = { minU: B.minU, minV: B.minV, w: w1, h: h1, D, flip, map: m };
-      if (env.stats) env.stats.groundPaints++;
-      for (const cb of rebuildCbs) { try { cb(L.info); } catch (e) { /* hooks never break the frame */ } }
+      const info = { minU: B.minU, minV: B.minV, w: w1, h: h1, D, flip, map: m };
+      if (L.canvas && L.base === base) { // same board, new density: paint a strip or two per frame, keep blitting the old layer meanwhile (ant77)
+        const tj = performance.now(); if (!job) job = { key, base, D, canvas: (env.makeCanvas || makeCanvas)(cw, ch), cw, ch, B, info, next: 0, rows: stripRows(cw), P: projector(m, flip), t, tex: texture(t, state) };
+        const g = job.canvas.getContext('2d'), t0 = performance.now();
+        if (LAYER.trace) LAYER.trace.push(['setup', +(t0 - tj).toFixed(1)]);
+        do {
+          const y1 = Math.min(ch, job.next + job.rows), ts = performance.now();
+          paintStrip(g, job, state, job.next, y1); job.next = y1;
+          if (LAYER.trace) LAYER.trace.push(['strip', +(performance.now() - ts).toFixed(1), job.rows * job.cw]);
+        } while (job.next < ch && performance.now() - t0 < LAYER.STRIP_MS);
+        if (job.next >= ch) { const j = job; job = null; finishLayer(j, state, env); }
+      } else { // nothing to show meanwhile (first paint, a new game, a changed terrain): all at once
+        dropJob();
+        const reuse = L.canvas && L.canvas.width === cw && L.canvas.height === ch, canvas = reuse ? L.canvas : (env.makeCanvas || makeCanvas)(cw, ch);
+        if (!reuse) releaseCanvas(L.canvas);
+        const g = canvas.getContext('2d');
+        g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cw, ch);
+        g.setTransform(D, 0, 0, D, -B.minU * D, -B.minV * D);
+        paintLayer(g, projector(m, flip), state, t, texture(t, state), D, state.seed);
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        L.key = key; L.base = base; L.canvas = canvas; L.w = cw; L.h = ch; L.D = D; L.info = info;
+        if (env.stats) env.stats.groundPaints++;
+        for (const cb of rebuildCbs) { try { cb(L.info); } catch (e) { /* hooks never break the frame */ } }
+      }
     }
     const o = toScreen(flip ? m : 0, flip ? m : 0); // world point whose unit-space coords are (0, 0)
     // ant68: blit only the part of the layer on screen. The layer is up to 4096x4096 px; handing a canvas that size to drawImage when a few
@@ -706,7 +748,7 @@
   }
 
   root.TerrainDraw = {
-    ground, items, at, rocks, rock, rockId, bakeRocks, frame, digRings, drawBoard, buildTexture, layerBounds, paintLayer, projector, texelsPerTile, ROCK_BOX, paintRock, applyTint,
+    ground, items, at, rocks, rock, rockId, bakeRocks, frame, digRings, drawBoard, layerCfg: LAYER, layerPending: () => !!job, buildTexture, layerBounds, paintLayer, projector, texelsPerTile, ROCK_BOX, paintRock, applyTint,
     palette: PAL, TOD,
     tod: () => TOD[todName], setTod, overlay, emitters,
     ambient: () => !reduced(), // false in Reduced motion: ambient motion must stand still
